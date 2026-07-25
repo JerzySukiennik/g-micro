@@ -19,6 +19,7 @@ Mask 1 = a position the loss is computed on.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -26,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from tokenizers import Tokenizer
 
 SOURCES = [
@@ -35,7 +37,7 @@ SOURCES = [
     "Lajonbot/alpaca-dolly-chrisociepa-instruction-only-polish",
 ]
 
-U, A, EOT = "<|user|>", "<|assistant|>", "<|endoftext|>"
+U, A, EOT, CTX = "<|user|>", "<|assistant|>", "<|endoftext|>", "<|context|>"
 
 # Neither Alpaca corpus contains a single example teaching the model its own
 # name — confirmed live, 2026-07-22: asked "jak masz na imię?" the SFT model
@@ -63,6 +65,70 @@ IDENTITY_EXAMPLES = [
     ("Jak brzmi twoja nazwa?", "Nazywam się MicroG."),
 ]
 IDENTITY_REPEATS = 60
+
+# Confirmed live, 2026-07-25: even with the right Wikipedia/vault snippet
+# handed to the model as plain text right before the question (see
+# runtime/rag.py), the answer still ignored it and confabulated something
+# unrelated. The identity fix worked because it's a closed, memorisable set
+# repeated many times; grounding-in-context is a *skill* (read the preceding
+# text, then answer from it), and nothing in either Alpaca corpus ever
+# demonstrates that skill — SFT so far only ever taught "answer the
+# question", never "answer the question using the text above it". Unlike the
+# identity examples, this needs breadth (many different contexts), not
+# repetition of a few — the model needs to generalise the *habit*, not
+# memorise specific facts.
+CONTEXT_QA_REPO = "clarin-pl/poquad"
+CONTEXT_QA_FILE = "poquad-dev.json"  # dev split alone has ~5.7k answerable QAs
+CONTEXT_QA_SAMPLE = 1200
+
+
+def load_context_qa_examples(sample_size=CONTEXT_QA_SAMPLE, seed=0):
+    """PoQuAD ships as raw SQuAD-format JSON with a loader script the
+    `datasets` library no longer supports running ("Dataset scripts are no
+    longer supported") — download and parse the JSON directly instead of
+    going through `load_dataset`."""
+    path = hf_hub_download(CONTEXT_QA_REPO, CONTEXT_QA_FILE, repo_type="dataset",
+                            token=read_token())
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    triples = []
+    for article in data["data"]:
+        for para in article["paragraphs"]:
+            context = para["context"]
+            for qa in para["qas"]:
+                if qa["is_impossible"] or not qa["answers"]:
+                    continue
+                ans = qa["answers"][0]
+                # generative_answer reads like a real reply ("Warszawa jest
+                # stolicą Polski"); the raw extracted span ("Polski") reads
+                # like a search-engine result. We want the former — this is
+                # meant to teach conversational grounding, not extraction.
+                answer = ans.get("generative_answer") or ans.get("text")
+                if not answer:
+                    continue
+                triples.append((context, qa["question"], answer))
+
+    rng = np.random.default_rng(seed)
+    idx = rng.permutation(len(triples))[:sample_size]
+    return [triples[i] for i in idx]
+
+
+def format_context_example(context, question, answer, max_context_chars=800):
+    """Same (prompt, reply) shape as format_example, with the source text
+    wrapped in the tokenizer's reserved <|context|> token in front of the
+    <|user|> turn. That token was reserved before pretraining started but
+    never actually used in a single real training example until now — this
+    IS the training pass that finally gives it a meaning, so use it properly
+    rather than perpetuating the plain-text workaround runtime/rag.py used
+    only because nothing had taught the model this token yet. Once this SFT
+    pass lands, update rag.py's injection to match (wrap retrieved text in
+    <|context|>...) instead of bare prepended prose."""
+    context, question, answer = clean(context), clean(question), clean(answer)
+    if len(context) < 20 or len(question) < 4 or len(answer) < 2:
+        return None
+    context = context[:max_context_chars]
+    return f"{CTX}\n{context}\n\n{U}\n{question}\n{A}\n", answer + EOT
 
 
 def read_token(env=Path(".env")):
@@ -115,7 +181,7 @@ def format_example(instruction, inp, output):
 
 def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
     tok = Tokenizer.from_file(str(tokenizer_path))
-    for t in (U, A, EOT):
+    for t in (U, A, EOT, CTX):
         assert tok.token_to_id(t) is not None, f"{t} missing from tokenizer"
 
     token_buf, mask_buf = [], []
@@ -181,6 +247,34 @@ def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
     kept += identity_kept
     print(f"identity examples: {len(IDENTITY_EXAMPLES)} written x{IDENTITY_REPEATS} "
           f"= {identity_kept:,} kept", flush=True)
+
+    # Context-grounded QA: teaches the *habit* of reading the <|context|>
+    # block and answering from it, which nothing else in this build ever
+    # demonstrates. Breadth matters here, not repetition — sampled once each
+    # from PoQuAD rather than repeated like the identity examples, since the
+    # goal is generalising a skill across many different texts, not
+    # memorising a fixed handful of facts.
+    context_kept = context_dropped = 0
+    for context, question, answer in load_context_qa_examples():
+        made = format_context_example(context, question, answer)
+        if made is None:
+            context_dropped += 1
+            continue
+        prompt, reply = made
+        p_ids = tok.encode(prompt).ids
+        r_ids = tok.encode(reply).ids
+        ids = p_ids + r_ids
+        if len(ids) > max_len:
+            context_dropped += 1
+            continue
+        mask = np.zeros(len(ids), dtype=np.uint8)
+        mask[len(p_ids):] = 1
+        token_buf.append(np.asarray(ids, dtype=np.uint16))
+        mask_buf.append(mask)
+        context_kept += 1
+    kept += context_kept
+    print(f"context-QA examples: {context_kept:,} kept, {context_dropped:,} dropped",
+          flush=True)
 
     # finetune.py's val split is just "the last val_frac of examples by
     # position here" (SFTData: offsets[:cut] / offsets[cut:]) — with identity
