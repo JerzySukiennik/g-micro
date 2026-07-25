@@ -182,6 +182,20 @@ def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
     print(f"identity examples: {len(IDENTITY_EXAMPLES)} written x{IDENTITY_REPEATS} "
           f"= {identity_kept:,} kept", flush=True)
 
+    # finetune.py's val split is just "the last val_frac of examples by
+    # position here" (SFTData: offsets[:cut] / offsets[cut:]) — with identity
+    # examples appended after the whole main corpus, every single one of them
+    # landed past the cut and the model was trained on literally zero of
+    # them, only ever evaluated against them. Confirmed by direct
+    # calculation before this fix: 89,495 main + 960 identity, 2% val cut
+    # sits at index 88,645 — entirely before the identity block starts at
+    # 89,495. Shuffling before the split fixes this generally, not just for
+    # the current counts.
+    rng = np.random.default_rng(0)
+    order = rng.permutation(len(token_buf))
+    token_buf = [token_buf[i] for i in order]
+    mask_buf = [mask_buf[i] for i in order]
+
     tokens = np.concatenate(token_buf)
     masks = np.concatenate(mask_buf)
     assert len(tokens) == len(masks)
