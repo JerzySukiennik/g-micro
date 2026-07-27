@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 import numpy as np
@@ -63,8 +64,47 @@ IDENTITY_EXAMPLES = [
     ("Skąd pochodzisz?", "Zostałem stworzony od zera przez Jurka, w ramach projektu Gzowo AI."),
     ("Czy masz imię?", "Tak, nazywam się MicroG."),
     ("Jak brzmi twoja nazwa?", "Nazywam się MicroG."),
+    ("Czy jesteś Claude?", "Nie, nie jestem Claude. Nazywam się MicroG i jestem osobnym, dużo mniejszym modelem."),
+    ("Czy jesteś Gemini?", "Nie, nie jestem Gemini. Nazywam się MicroG i jestem osobnym, dużo mniejszym modelem."),
+    ("Czy jesteś człowiekiem?", "Nie, jestem modelem językowym o nazwie MicroG."),
 ]
 IDENTITY_REPEATS = 60
+
+
+def strip_diacritics(text: str) -> str:
+    """Polish text with the accents removed — 'imię' -> 'imie'.
+
+    NFD decomposition splits an accented letter into base + combining mark, so
+    dropping the marks leaves the bare letter. 'ł' is the one Polish letter
+    that has no decomposition (the stroke is part of the glyph, not a combining
+    mark), so it needs mapping by hand or it would survive untouched.
+    """
+    text = text.replace("ł", "l").replace("Ł", "L")
+    return "".join(c for c in unicodedata.normalize("NFD", text)
+                   if not unicodedata.combining(c))
+
+
+def identity_pairs():
+    """IDENTITY_EXAMPLES plus an accent-free variant of every question.
+
+    Confirmed live, 2026-07-27: after the first identity fix landed, "Jak masz
+    na imię?" answered "Nazywam się MicroG." with p=0.92 on the first token —
+    solidly memorised — while "Jak masz na imie?" (same question typed without
+    the ogonek) answered "Mam na imie." and "Kim jestes?" wandered off into
+    unrelated chatter. BPE sees 'imię' and 'imie' as different token
+    sequences, and 16 strings x60 repeats memorises *those sequences*, not the
+    concept behind them, so there is nothing to generalise from. People type
+    Polish without diacritics constantly, so both spellings have to be taught.
+
+    Only the question is stripped, never the answer: sloppy input should still
+    get a correctly-written Polish reply back.
+    """
+    seen = set()
+    for instruction, output in IDENTITY_EXAMPLES:
+        for variant in (instruction, strip_diacritics(instruction)):
+            if variant not in seen:
+                seen.add(variant)
+                yield variant, output
 
 # Confirmed live, 2026-07-25: even with the right Wikipedia/vault snippet
 # handed to the model as plain text right before the question (see
@@ -228,7 +268,9 @@ def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
     # deliberate repetition is the whole point here, not something to dedup
     # away like an accidental corpus overlap.
     identity_kept = 0
-    for instruction, output in IDENTITY_EXAMPLES:
+    identity_written = 0
+    for instruction, output in identity_pairs():
+        identity_written += 1
         made = format_example(instruction, None, output)
         if made is None:
             continue
@@ -245,7 +287,8 @@ def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
             mask_buf.append(mask)
             identity_kept += 1
     kept += identity_kept
-    print(f"identity examples: {len(IDENTITY_EXAMPLES)} written x{IDENTITY_REPEATS} "
+    print(f"identity examples: {len(IDENTITY_EXAMPLES)} written "
+          f"({identity_written} incl. accent-free variants) x{IDENTITY_REPEATS} "
           f"= {identity_kept:,} kept", flush=True)
 
     # Context-grounded QA: teaches the *habit* of reading the <|context|>
