@@ -118,8 +118,23 @@ def identity_pairs():
 # repetition of a few — the model needs to generalise the *habit*, not
 # memorise specific facts.
 CONTEXT_QA_REPO = "clarin-pl/poquad"
-CONTEXT_QA_FILE = "poquad-dev.json"  # dev split alone has ~5.7k answerable QAs
-CONTEXT_QA_SAMPLE = 1200
+# Measured 2026-07-27 with bench/chat_eval.py: context_grounding scored 20%
+# (1/5, and that one answer was "Anna Reuttin" for "Anna Reut"). Asked the
+# build year of a castle the context says was built in 1417, the model
+# answered 1418; asked where a company sits when the context says Gdynia, it
+# said Gdańsk. It had learned the *shape* of a grounded answer — a year, a
+# count, a city — while ignoring the text entirely.
+#
+# The cause is signal, not capability. Loss is computed on replies only, and
+# 1,200 context examples with ~15-token replies contribute ~18k trained
+# tokens against ~9.5M — 0.2% of everything the model learns from. Grounding
+# is a skill, so it needs breadth: the train split has 46k answerable QAs
+# against the 5.7k in dev, and was simply never used.
+#
+# dev is deliberately left untouched so it stays a genuine holdout for
+# measuring grounding on data the model has never seen.
+CONTEXT_QA_FILE = "poquad-train.json"  # 46,187 answerable QAs
+CONTEXT_QA_SAMPLE = 30000
 
 
 def load_context_qa_examples(sample_size=CONTEXT_QA_SAMPLE, seed=0):
