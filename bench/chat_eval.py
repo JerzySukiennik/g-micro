@@ -66,29 +66,86 @@ IDENTITY_MARKERS = ("MicroG", "modelem językowym", "model językowy", "110 mili
 # (context, question, strings that a grounded answer should contain).
 # The point is not world knowledge — it is whether the model reads the text in
 # front of it. Facts are deliberately checkable only from the context.
+#
+# Sized deliberately: with five cases one answer moved the score by 20% and
+# two rounds of training could not be told apart from noise. Eighteen cases,
+# half of them numeric, make a single flip worth ~6% and let the numeric and
+# name-copying halves be scored separately — that split is what showed round A
+# fixed names while leaving numbers untouched.
+_CASTLE = ("Zamek w Bąkowie został zbudowany w 1417 roku przez rycerza Mikołaja "
+           "Warkosza. Zamek ma cztery wieże i fosę o głębokości sześciu metrów.")
+_NORTEM = ("Firma Nortem wyprodukowała w zeszłym roku 12 400 rowerów elektrycznych. "
+           "Jej siedziba mieści się w Gdyni, a założycielem jest Anna Reut.")
+_RIVER = ("Rzeka Skawica ma 42 kilometry długości i wpada do Skawy w miejscowości "
+          "Białka. Nad rzeką leżą trzy młyny wodne.")
+_SCHOOL = ("Szkoła w Turzysku powstała w 1963 roku. Uczy się w niej 214 uczniów, "
+           "a dyrektorem jest Marek Ostrowski. Budynek ma trzy piętra.")
+_LAB = ("Laboratorium Wega zatrudnia 87 osób i mieści się w Toruniu. Kieruje nim "
+        "profesor Halina Dąbek. Powstało w 2011 roku.")
+_MUSEUM = ("Muzeum Kolei Wąskotorowej w Rudnie otwarto w 1998 roku. Zgromadzono w nim "
+           "26 parowozów, a kuratorem zbiorów jest Tomasz Wielgus.")
+
 CONTEXT_CASES = [
-    ("Zamek w Bąkowie został zbudowany w 1417 roku przez rycerza Mikołaja Warkosza. "
-     "Zamek ma cztery wieże i fosę o głębokości sześciu metrów.",
-     "W którym roku zbudowano zamek w Bąkowie?", ["1417"]),
-    ("Zamek w Bąkowie został zbudowany w 1417 roku przez rycerza Mikołaja Warkosza. "
-     "Zamek ma cztery wieże i fosę o głębokości sześciu metrów.",
-     "Ile wież ma zamek w Bąkowie?", ["cztery", "4"]),
-    ("Firma Nortem wyprodukowała w zeszłym roku 12 400 rowerów elektrycznych. "
-     "Jej siedziba mieści się w Gdyni, a założycielem jest Anna Reut.",
-     "Kto założył firmę Nortem?", ["Anna Reut", "Reut"]),
-    ("Firma Nortem wyprodukowała w zeszłym roku 12 400 rowerów elektrycznych. "
-     "Jej siedziba mieści się w Gdyni, a założycielem jest Anna Reut.",
-     "Gdzie mieści się siedziba firmy Nortem?", ["Gdyni", "Gdynia"]),
-    ("Rzeka Skawica ma 42 kilometry długości i wpada do Skawy w miejscowości Białka. "
-     "Nad rzeką leżą trzy młyny wodne.",
-     "Ile kilometrów ma rzeka Skawica?", ["42"]),
+    # numeric answers — the measured weak half
+    (_CASTLE, "W którym roku zbudowano zamek w Bąkowie?", ["1417"], "num"),
+    (_CASTLE, "Ile wież ma zamek w Bąkowie?", ["cztery", "4"], "num"),
+    (_CASTLE, "Jaka jest głębokość fosy?", ["sześciu", "sześć", "6"], "num"),
+    (_NORTEM, "Ile rowerów wyprodukowała firma Nortem?", ["12 400", "12400"], "num"),
+    (_RIVER, "Ile kilometrów ma rzeka Skawica?", ["42"], "num"),
+    (_RIVER, "Ile młynów leży nad rzeką?", ["trzy", "3"], "num"),
+    (_SCHOOL, "W którym roku powstała szkoła w Turzysku?", ["1963"], "num"),
+    (_SCHOOL, "Ilu uczniów uczy się w szkole?", ["214"], "num"),
+    (_SCHOOL, "Ile pięter ma budynek szkoły?", ["trzy", "3"], "num"),
+    (_LAB, "Ile osób zatrudnia laboratorium Wega?", ["87"], "num"),
+    (_LAB, "W którym roku powstało laboratorium?", ["2011"], "num"),
+    (_MUSEUM, "Ile parowozów zgromadzono w muzeum?", ["26"], "num"),
+    (_MUSEUM, "W którym roku otwarto muzeum?", ["1998"], "num"),
+    # name / place answers — the half round A fixed
+    (_NORTEM, "Kto założył firmę Nortem?", ["Reut"], "name"),
+    (_NORTEM, "Gdzie mieści się siedziba firmy Nortem?", ["Gdyn"], "name"),
+    (_CASTLE, "Kto zbudował zamek w Bąkowie?", ["Warkosz"], "name"),
+    (_SCHOOL, "Kto jest dyrektorem szkoły?", ["Ostrowski"], "name"),
+    (_LAB, "Gdzie mieści się laboratorium Wega?", ["Toruni"], "name"),
+    (_MUSEUM, "Kto jest kuratorem zbiorów?", ["Wielgus"], "name"),
+    (_RIVER, "Do jakiej rzeki wpada Skawica?", ["Skaw"], "name"),
 ]
 
 # "List exactly N things" — checks instruction following, and catches the
 # "1) Azja 2.) Azja" degenerate repeat seen on 2026-07-27.
+#
+# (question, how many items, set of acceptable items). The third field exists
+# because counting alone scored "Ziemia, Europa, Antarktyda" as a perfect list
+# of planets — a moon and a continent. Round B answered "Ziemia, Mars, Wenus"
+# and scored no better, so the benchmark was blind to the one thing that
+# actually improved. Membership is checked loosely (prefix match, so Polish
+# case endings pass) and only when a vocabulary is known.
 LIST_CASES = [
-    ("Wymień trzy planety.", 3), ("Wymień trzy owoce.", 3),
-    ("Wymień trzy kolory.", 3), ("Podaj dwa polskie miasta.", 2),
+    ("Wymień trzy planety.", 3,
+     {"merkur", "wenus", "ziemi", "mars", "jowisz", "saturn", "uran", "neptun"}),
+    ("Wymień trzy owoce.", 3,
+     {"jabłk", "jablk", "grusz", "śliw", "sliw", "banan", "pomarańcz", "pomarancz",
+      "truskaw", "malin", "winogron", "brzoskwin", "arbuz", "wiśni", "wisni",
+      "czereśni", "czeresni", "ananas", "mandarynk", "cytryn", "borówk", "jagod"}),
+    ("Wymień trzy kolory.", 3,
+     {"czerwon", "niebiesk", "zielon", "żółt", "zolt", "czarn", "biał", "bial",
+      "szar", "brązow", "brazow", "różow", "rozow", "fiolet", "pomarańczow",
+      "pomaranczow", "granat", "beżow", "bezow", "turkus"}),
+    ("Podaj dwa polskie miasta.", 2,
+     {"warszaw", "krak", "łódź", "lodz", "wrocław", "wroclaw", "poznań", "poznan",
+      "gdańsk", "gdansk", "szczecin", "bydgoszcz", "lublin", "katowic", "gdyni",
+      "toruń", "torun", "radom", "rzeszów", "rzeszow", "olsztyn", "opole"}),
+    ("Wymień trzy zwierzęta.", 3,
+     {"pies", "psa", "kot", "koń", "kon", "krow", "świni", "swini", "owc", "kur",
+      "lis", "wilk", "niedźwiedź", "niedzwiedz", "zając", "zajac", "sarn", "jeleń",
+      "jelen", "słoń", "slon", "tygrys", "lew", "małp", "malp", "mysz", "ryb"}),
+    ("Wymień trzy dni tygodnia.", 3,
+     {"poniedział", "poniedzial", "wtorek", "środ", "srod", "czwartek", "piątek",
+      "piatek", "sobot", "niedziel"}),
+    ("Wymień cztery pory roku.", 4,
+     {"wiosn", "lat", "jesień", "jesien", "zim"}),
+    ("Podaj trzy owoce cytrusowe.", 3, None),
+    ("Wymień trzy środki transportu.", 3, None),
+    ("Podaj dwa instrumenty muzyczne.", 2, None),
 ]
 
 # Plain, unambiguous Polish. Lower loss per token = the model finds ordinary
@@ -197,23 +254,41 @@ def evaluate(ckpt_path):
             lambda c, a: not any(m in a for m in IDENTITY_MARKERS))
 
     # Context grounding needs its own loop — the prompt carries a context block.
-    hits, rows = 0, []
-    for ctx, q, expect in CONTEXT_CASES:
+    # Numeric and name cases are scored apart as well as together: round A
+    # moved names from wrong to right while leaving every number untouched,
+    # and a single blended number hid that completely.
+    rows, by_kind = [], {"num": [0, 0], "name": [0, 0]}
+    for ctx, q, expect, kind in CONTEXT_CASES:
         ans, eot = ask(chat_prompt(q, context=ctx))
         ok = any(e.lower() in ans.lower() for e in expect)
-        hits += ok
-        rows.append({"q": q, "a": ans, "ok": bool(ok), "expect": expect})
-    res["context_grounding"] = hits / len(CONTEXT_CASES)
+        by_kind[kind][0] += ok
+        by_kind[kind][1] += 1
+        rows.append({"q": q, "a": ans, "ok": bool(ok), "expect": expect, "kind": kind})
+    res["grounding_numbers"] = by_kind["num"][0] / by_kind["num"][1]
+    res["grounding_names"] = by_kind["name"][0] / by_kind["name"][1]
+    res["context_grounding"] = sum(r["ok"] for r in rows) / len(rows)
     detail["context_grounding"] = rows
 
-    hits, rows = 0, []
-    for q, n in LIST_CASES:
+    # Two separate questions about a list answer: does it have the right shape
+    # (enough distinct items), and are the items actually what was asked for.
+    shape_hits, correct_hits, scored, rows = 0, 0, 0, []
+    for q, n, vocab in LIST_CASES:
         ans, eot = ask(chat_prompt(q))
         got = count_list_items(ans)
-        ok = got >= n
-        hits += ok
-        rows.append({"q": q, "a": ans, "ok": bool(ok), "want": n, "got": got})
-    res["list_following"] = hits / len(LIST_CASES)
+        shape_ok = got >= n
+        shape_hits += shape_ok
+        row = {"q": q, "a": ans, "ok": bool(shape_ok), "want": n, "got": got,
+               "eot": eot}
+        if vocab is not None:
+            low = ans.lower()
+            found = {v for v in vocab if v in low}
+            correct_ok = len(found) >= n
+            correct_hits += correct_ok
+            scored += 1
+            row.update(correct=bool(correct_ok), matched=sorted(found))
+        rows.append(row)
+    res["list_following"] = shape_hits / len(LIST_CASES)
+    res["list_correct"] = correct_hits / scored if scored else float("nan")
     detail["list_following"] = rows
 
     # Termination and repetition, measured over everything already generated.
@@ -234,8 +309,13 @@ def evaluate(ckpt_path):
     return res, detail
 
 
+# grounding_numbers / grounding_names are diagnostic breakdowns of
+# context_grounding, so they are printed but left out of the average to avoid
+# counting the same cases three times.
 SCORES = ["identity_diacritics", "identity_plain", "no_identity_leak",
-          "context_grounding", "list_following", "stops_cleanly", "no_repeat_loop"]
+          "context_grounding", "list_following", "list_correct",
+          "stops_cleanly", "no_repeat_loop"]
+DIAGNOSTIC = ["grounding_numbers", "grounding_names"]
 
 
 def main():
@@ -257,6 +337,9 @@ def main():
         print(f"{s:<{width}}" + "".join(f"{r[s] * 100:>15.0f}%" for r in results))
     print(f"{'OVERALL':<{width}}" +
           "".join(f"{sum(r[s] for s in SCORES) / len(SCORES) * 100:>15.1f}%" for r in results))
+    print(f"\n{'-- diagnostic (inside context_grounding) --':<{width}}")
+    for s in DIAGNOSTIC:
+        print(f"{s:<{width}}" + "".join(f"{r[s] * 100:>15.0f}%" for r in results))
     print(f"\n{'polish_loss/token':<{width}}" +
           "".join(f"{r['polish_loss_per_token']:>16.4f}" for r in results) + "   (lower better)")
     print(f"{'sft val_loss':<{width}}" +
