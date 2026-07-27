@@ -29,13 +29,11 @@ from model.gpt import GPT, GPTConfig  # noqa: E402
 # (label, n_layer, n_head, n_embd). head_dim stays 64 throughout, as in MicroG.
 CANDIDATES = [
     ("MicroG 110M (baseline)", 12, 12, 768),
-    ("kandydat 150M",          16, 12, 768),
-    ("kandydat 190M",          16, 14, 896),
-    ("kandydat 230M",          18, 14, 896),
+    ("kandydat 185M",          16, 14, 896),
+    ("kandydat 204M",          18, 14, 896),
     ("MiniG 282M",             20, 16, 1024),
-    ("CoreG 517M",             24, 20, 1280),
 ]
-BLOCK = 1024
+BLOCK = int(__import__("os").environ.get("PROBE_BLOCK", 1024))
 STEPS = 3          # optimiser steps timed (each is ACCUM micro-batches)
 WARMUP = 1
 # Real training accumulates gradients to a ~65k-token step (train/train.py:
@@ -102,6 +100,7 @@ def main():
         raise SystemExit("no GPU — this probe only means anything on the real hardware")
     name = torch.cuda.get_device_name(0)
     total = torch.cuda.get_device_properties(0).total_memory / 1e9
+    print(f"block_size={BLOCK}")
     print(f"GPU: {name}  ({total:.1f} GB, {torch.cuda.device_count()} visible)")
     print(f"capability {torch.cuda.get_device_capability()}  "
           f"-> {'bf16' if torch.cuda.get_device_capability()[0] >= 8 else 'fp16'}\n")
