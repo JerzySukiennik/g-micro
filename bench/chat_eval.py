@@ -136,10 +136,20 @@ LIST_CASES = [
      {"warszaw", "krak", "łódź", "lodz", "wrocław", "wroclaw", "poznań", "poznan",
       "gdańsk", "gdansk", "szczecin", "bydgoszcz", "lublin", "katowic", "gdyni",
       "toruń", "torun", "radom", "rzeszów", "rzeszow", "olsztyn", "opole"}),
+    # Wider than the obvious farm-and-forest set: the model answered "jaguary,
+    # bocian, jelenie" and scored 1/3 because a jaguar and a stork were missing
+    # from the vocabulary, not from the answer. An incomplete vocabulary makes
+    # list_correct a lower bound rather than a measurement.
     ("Wymień trzy zwierzęta.", 3,
      {"pies", "psa", "kot", "koń", "kon", "krow", "świni", "swini", "owc", "kur",
       "lis", "wilk", "niedźwiedź", "niedzwiedz", "zając", "zajac", "sarn", "jeleń",
-      "jelen", "słoń", "slon", "tygrys", "lew", "małp", "malp", "mysz", "ryb"}),
+      "jelen", "słoń", "slon", "tygrys", "lew", "małp", "malp", "mysz", "ryb",
+      "jaguar", "bocian", "żyraf", "zyraf", "zebr", "krokodyl", "wielorib",
+      "wieloryb", "delfin", "orzeł", "orzel", "sow", "wróbl", "wrobl", "gołąb",
+      "golab", "jaszczur", "wąż", "waz", "żółw", "zolw", "królik", "krolik",
+      "wiewiór", "wiewior", "borsuk", "dzik", "łoś", "los ", "ryś", "rys ",
+      "hipopotam", "nosoroż", "nosoroz", "pantera", "gepard", "kangur", "koal",
+      "panda", "foka", "rekin", "motyl", "pszczoł", "pszczol", "mrów", "mrow"}),
     ("Wymień trzy dni tygodnia.", 3,
      {"poniedział", "poniedzial", "wtorek", "środ", "srod", "czwartek", "piątek",
       "piatek", "sobot", "niedziel"}),
