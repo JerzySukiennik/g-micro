@@ -85,6 +85,50 @@ _LAB = ("Laboratorium Wega zatrudnia 87 osób i mieści się w Toruniu. Kieruje 
 _MUSEUM = ("Muzeum Kolei Wąskotorowej w Rudnie otwarto w 1998 roku. Zgromadzono w nim "
            "26 parowozów, a kuratorem zbiorów jest Tomasz Wielgus.")
 
+# Real retrieved contexts are Wikipedia-length paragraphs, not two sentences.
+# Confirmed live 2026-07-27 with RAG working correctly: handed the actual
+# "Kraków" article the model answered "w północnej Polsce", and handed the
+# "Fryderyk Chopin" article it put his birth in 1832. The short cases above
+# score far better than that, so they were measuring an easier task than the
+# app performs — the same benchmark-versus-reality gap that has bitten this
+# suite repeatedly. These cases carry the distractors, dates and clause
+# density of the real thing.
+_LONG_TOWN = (
+    "Rudniki Wielkie to miasto w województwie podkarpackim, położone w "
+    "południowo-wschodniej części kraju, nad rzeką Osławą. Prawa miejskie "
+    "otrzymało w 1382 roku z nadania Władysława Opolczyka, choć pierwsza "
+    "wzmianka o osadzie pochodzi z 1274 roku. W XVI wieku miasto słynęło z "
+    "wyrobu sukna, a w 1611 roku strawił je pożar, po którym odbudowano "
+    "jedynie część zabudowy. Według spisu z 2021 roku Rudniki Wielkie liczyły "
+    "8 431 mieszkańców. Burmistrzem miasta jest od 2018 roku Zofia Malczyk. "
+    "W mieście działa muzeum tkactwa, otwarte w 1974 roku, oraz zabytkowy "
+    "kościół pod wezwaniem świętego Bartłomieja, wzniesiony w latach "
+    "1503-1519. Przez Rudniki Wielkie przebiega droga wojewódzka numer 892."
+)
+_LONG_SCIENTIST = (
+    "Helena Wroniecka (ur. 3 marca 1897 w Kaliszu, zm. 12 listopada 1968 w "
+    "Poznaniu) – polska chemiczka, profesor Uniwersytetu Poznańskiego. Studia "
+    "ukończyła w 1921 roku w Krakowie, gdzie następnie pracowała jako "
+    "asystentka. W 1934 roku obroniła habilitację poświęconą związkom "
+    "krzemoorganicznym. Podczas okupacji prowadziła tajne nauczanie. Katedrą "
+    "chemii nieorganicznej kierowała przez dwadzieścia dwa lata, od 1946 do "
+    "1968 roku. Wypromowała 41 doktorantów. Za pracę nad katalizatorami "
+    "otrzymała w 1961 roku nagrodę państwową drugiego stopnia. Jej najbardziej "
+    "cytowana publikacja ukazała się w 1952 roku."
+)
+
+CONTEXT_CASES_LONG = [
+    (_LONG_TOWN, "W którym roku Rudniki Wielkie otrzymały prawa miejskie?", ["1382"], "num"),
+    (_LONG_TOWN, "Ilu mieszkańców liczyły Rudniki Wielkie w 2021 roku?", ["8 431", "8431"], "num"),
+    (_LONG_TOWN, "Kto jest burmistrzem Rudnik Wielkich?", ["Malczyk"], "name"),
+    (_LONG_TOWN, "Nad jaką rzeką leżą Rudniki Wielkie?", ["Osław"], "name"),
+    (_LONG_TOWN, "W której części kraju leżą Rudniki Wielkie?", ["południow"], "name"),
+    (_LONG_SCIENTIST, "W którym roku urodziła się Helena Wroniecka?", ["1897"], "num"),
+    (_LONG_SCIENTIST, "Ilu doktorantów wypromowała Helena Wroniecka?", ["41"], "num"),
+    (_LONG_SCIENTIST, "W jakim mieście urodziła się Helena Wroniecka?", ["Kalisz"], "name"),
+    (_LONG_SCIENTIST, "Czym zajmowała się Helena Wroniecka?", ["chemi"], "name"),
+]
+
 CONTEXT_CASES = [
     # numeric answers — the measured weak half
     (_CASTLE, "W którym roku zbudowano zamek w Bąkowie?", ["1417"], "num"),
@@ -270,14 +314,19 @@ def evaluate(ckpt_path):
     # moved names from wrong to right while leaving every number untouched,
     # and a single blended number hid that completely.
     rows, by_kind = [], {"num": [0, 0], "name": [0, 0]}
-    for ctx, q, expect, kind in CONTEXT_CASES:
+    long_hits = 0
+    for ctx, q, expect, kind in CONTEXT_CASES + CONTEXT_CASES_LONG:
         ans, eot = ask(chat_prompt(q, context=ctx))
         ok = any(e.lower() in ans.lower() for e in expect)
         by_kind[kind][0] += ok
         by_kind[kind][1] += 1
-        rows.append({"q": q, "a": ans, "ok": bool(ok), "expect": expect, "kind": kind})
+        is_long = len(ctx) > 400
+        long_hits += ok and is_long
+        rows.append({"q": q, "a": ans, "ok": bool(ok), "expect": expect,
+                     "kind": kind, "long": is_long})
     res["grounding_numbers"] = by_kind["num"][0] / by_kind["num"][1]
     res["grounding_names"] = by_kind["name"][0] / by_kind["name"][1]
+    res["grounding_long_ctx"] = long_hits / len(CONTEXT_CASES_LONG)
     res["context_grounding"] = sum(r["ok"] for r in rows) / len(rows)
     detail["context_grounding"] = rows
 
@@ -327,7 +376,7 @@ def evaluate(ckpt_path):
 SCORES = ["identity_diacritics", "identity_plain", "no_identity_leak",
           "context_grounding", "list_following", "list_correct",
           "stops_cleanly", "no_repeat_loop"]
-DIAGNOSTIC = ["grounding_numbers", "grounding_names"]
+DIAGNOSTIC = ["grounding_numbers", "grounding_names", "grounding_long_ctx"]
 
 
 def main():
