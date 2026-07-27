@@ -162,6 +162,219 @@ LIST_VARIANTS_PER_CATEGORY = 30
 LIST_REPEATS = 4
 
 
+# Measured 2026-07-27: grounding on real-length contexts scores 11% (1/9)
+# while the same skill on two-sentence contexts scores 65%. The failures are
+# never "I cannot find it" — they are "8 321" for 8 431, "w Kalininie" for
+# w Kaliszu, "północno-zachodniej" for południowo-wschodniej. The model locates
+# roughly the right place and then emits a plausible neighbour instead of what
+# is written.
+#
+# This is not a shortage of context data: PoQuAD contexts already have a median
+# of 776 characters and 78% run past 600. What PoQuAD does not provide is
+# *pressure*. Its questions are natural, so a paragraph usually contains one
+# plausible candidate and approximate attention is enough to look right. These
+# drills remove that slack — every context carries six to nine competing values
+# of the same type, so only exact retrieval produces the exact answer.
+#
+# Values are drawn at random per example, so nothing here can be memorised: the
+# only strategy that generalises is reading. Names are invented from syllables
+# for the same reason, and every sentence template keeps invented proper nouns
+# in the nominative ("Burmistrzem miasta jest Zofia Malczyk", "Rzeka nosi nazwę
+# Osława") — declining made-up Polish names automatically would produce
+# ungrammatical training text.
+COPY_DRILL_COUNT = 9000
+
+_SYL_A = ["Rud", "Bąk", "Turz", "Osław", "Skaw", "Wiel", "Grod", "Miel", "Choc",
+          "Zator", "Bran", "Kośc", "Lubi", "Nadz", "Pilcz", "Sier", "Trzeb", "Wąs"]
+_SYL_B = ["niki", "owo", "ysko", "ica", "any", "ków", "no", "in", "awa", "ele",
+          "cze", "iny", "ory", "usz", "yca", "ejno"]
+_FIRST = ["Zofia", "Marek", "Halina", "Tomasz", "Anna", "Jerzy", "Irena", "Paweł",
+          "Krystyna", "Andrzej", "Wanda", "Stefan", "Barbara", "Michał", "Ewa",
+          "Roman", "Danuta", "Piotr", "Grażyna", "Karol"]
+_LAST = ["Malczyk", "Ostrowski", "Dąbek", "Wielgus", "Reut", "Warkosz", "Sadlik",
+         "Bęben", "Krupa", "Nowosad", "Ziętek", "Faron", "Mruk", "Cichoń",
+         "Pluta", "Zawada", "Gil", "Hajduk", "Szewc", "Baran"]
+_REGION = ["podkarpackim", "lubuskim", "opolskim", "podlaskim", "świętokrzyskim",
+           "warmińsko-mazurskim", "kujawsko-pomorskim", "dolnośląskim"]
+_PART = ["południowo-wschodniej", "północno-zachodniej", "środkowej",
+         "południowo-zachodniej", "północno-wschodniej", "wschodniej", "zachodniej"]
+_CRAFT = ["sukna", "ceramiki", "wyrobów kowalskich", "papieru czerpanego",
+          "mebli giętych", "szkła", "wikliny", "narzędzi rolniczych"]
+_FIELD = ["chemia nieorganiczna", "botanika", "geologia", "matematyka stosowana",
+          "fizyka ciała stałego", "historia sztuki", "językoznawstwo", "astronomia"]
+
+
+def _name(rng):
+    return _SYL_A[int(rng.integers(len(_SYL_A)))] + _SYL_B[int(rng.integers(len(_SYL_B)))]
+
+
+def _person(rng):
+    return (f"{_FIRST[int(rng.integers(len(_FIRST)))]} "
+            f"{_LAST[int(rng.integers(len(_LAST)))]}")
+
+
+def _pick(rng, pool):
+    return pool[int(rng.integers(len(pool)))]
+
+
+def _year(value, lo=1100, hi=2025):
+    """Keep derived years inside plausible history.
+
+    Offsets added to a base year run off the end otherwise — a first draft
+    produced "Prezesem zarządu jest od 2032 roku". The model would happily
+    copy that, but nonsense prose is still nonsense to train on."""
+    return int(max(lo, min(hi, value)))
+
+
+def _town(rng):
+    """A town described by nine facts, six of them numbers close enough in kind
+    that only the right sentence answers the right question."""
+    town, river = _name(rng), _name(rng)
+    rights = int(rng.integers(1200, 1600))
+    first_note = rights - int(rng.integers(20, 140))
+    fire = int(rng.integers(1601, 1799))
+    pop = int(rng.integers(1500, 90000))
+    since = int(rng.integers(1990, 2024))
+    museum = int(rng.integers(1900, 1995))
+    road = int(rng.integers(100, 999))
+    church_from = int(rng.integers(1400, 1550))
+    church_to = church_from + int(rng.integers(4, 40))
+    mayor, region, part, craft = _person(rng), _pick(rng, _REGION), _pick(rng, _PART), _pick(rng, _CRAFT)
+    ctx = (
+        f"{town} to miasto w województwie {region}, położone w {part} części kraju. "
+        f"Rzeka przepływająca przez miasto nosi nazwę {river}. "
+        f"Prawa miejskie {town} otrzymało w {rights} roku, choć pierwsza wzmianka o osadzie "
+        f"pochodzi z {first_note} roku. W XVI wieku miasto słynęło z wyrobu {craft}, "
+        f"a w {fire} roku strawił je pożar. Liczba mieszkańców wynosi {pop}. "
+        f"Burmistrzem miasta jest od {since} roku {mayor}. "
+        f"Muzeum regionalne otwarto w {museum} roku, a kościół parafialny wznoszono "
+        f"w latach {church_from}-{church_to}. Przez miasto przebiega droga wojewódzka "
+        f"numer {road}."
+    )
+    qa = [
+        (f"W którym roku {town} otrzymało prawa miejskie?", str(rights)),
+        ("Z którego roku pochodzi pierwsza wzmianka o osadzie?", str(first_note)),
+        ("W którym roku miasto strawił pożar?", str(fire)),
+        ("Ile wynosi liczba mieszkańców?", str(pop)),
+        ("Kto jest burmistrzem miasta?", mayor),
+        ("Od którego roku pełni funkcję burmistrz?", str(since)),
+        ("Jak nazywa się rzeka przepływająca przez miasto?", river),
+        ("W którym roku otwarto muzeum regionalne?", str(museum)),
+        ("Jaki numer ma droga wojewódzka przebiegająca przez miasto?", str(road)),
+        ("W jakim województwie leży miasto?", region),
+        ("W której części kraju leży miasto?", part),
+        ("Z wyrobu czego słynęło miasto w XVI wieku?", craft),
+    ]
+    return ctx, qa
+
+
+def _scholar(rng):
+    person = _person(rng)
+    born = int(rng.integers(1860, 1940))
+    died = _year(born + int(rng.integers(45, 92)))
+    studies = born + int(rng.integers(20, 30))
+    habil = studies + int(rng.integers(5, 20))
+    head_from = habil + int(rng.integers(2, 15))
+    head_to = _year(head_from + int(rng.integers(5, 30)))
+    phds = int(rng.integers(3, 120))
+    prize = _year(head_from + int(rng.integers(1, 20)))
+    papers = int(rng.integers(20, 400))
+    city_born, city_work = _name(rng), _name(rng)
+    field = _pick(rng, _FIELD)
+    ctx = (
+        f"{person} to polska uczona, profesor uniwersytetu. Miastem urodzenia jest "
+        f"{city_born}, a rokiem urodzenia {born}. Rokiem śmierci jest {died}. "
+        f"Studia ukończyła w {studies} roku, a habilitację obroniła w {habil} roku. "
+        f"Dziedzina, którą się zajmowała, to {field}. Katedrą kierowała od "
+        f"{head_from} do {head_to} roku, pracując w mieście, które nosi nazwę {city_work}. "
+        f"Liczba wypromowanych doktorantów wynosi {phds}. Nagrodę państwową otrzymała "
+        f"w {prize} roku. Liczba opublikowanych prac wynosi {papers}."
+    )
+    qa = [
+        ("W którym roku urodziła się uczona?", str(born)),
+        ("W którym roku zmarła uczona?", str(died)),
+        ("W którym roku ukończyła studia?", str(studies)),
+        ("W którym roku obroniła habilitację?", str(habil)),
+        ("Od którego roku kierowała katedrą?", str(head_from)),
+        ("Do którego roku kierowała katedrą?", str(head_to)),
+        ("Ilu doktorantów wypromowała?", str(phds)),
+        ("W którym roku otrzymała nagrodę państwową?", str(prize)),
+        ("Ile prac opublikowała?", str(papers)),
+        ("W jakim mieście się urodziła?", city_born),
+        ("W jakim mieście pracowała?", city_work),
+        ("Jaką dziedziną się zajmowała?", field),
+    ]
+    return ctx, qa
+
+
+def _company(rng):
+    firm, town = _name(rng), _name(rng)
+    founded = int(rng.integers(1900, 2020))
+    staff = int(rng.integers(8, 5000))
+    output = int(rng.integers(200, 99000))
+    plants = int(rng.integers(2, 40))
+    markets = int(rng.integers(2, 60))
+    founder, boss = _person(rng), _person(rng)
+    since = _year(founded + int(rng.integers(1, 40)))
+    patents = int(rng.integers(1, 300))
+    branch = _name(rng)
+    branch_year = _year(founded + int(rng.integers(2, 60)))
+    revenue = int(rng.integers(3, 900))
+    hall = int(rng.integers(400, 40000))
+    region = _pick(rng, _REGION)
+    ctx = (
+        f"Firma {firm} powstała w {founded} roku. Założycielem jest {founder}. "
+        f"Siedziba mieści się w mieście, które nosi nazwę {town}, w województwie {region}. "
+        f"Liczba zatrudnionych wynosi {staff}. Roczna produkcja wynosi {output} sztuk. "
+        f"Liczba zakładów produkcyjnych wynosi {plants}, a liczba rynków zagranicznych, "
+        f"na które firma eksportuje, wynosi {markets}. "
+        f"Prezesem zarządu jest od {since} roku {boss}. "
+        f"Liczba zgłoszonych patentów wynosi {patents}. "
+        f"Oddział zagraniczny, który nosi nazwę {branch}, uruchomiono w {branch_year} roku. "
+        f"Roczny przychód wynosi {revenue} milionów złotych, a powierzchnia hali "
+        f"produkcyjnej wynosi {hall} metrów kwadratowych."
+    )
+    qa = [
+        (f"W którym roku powstała firma {firm}?", str(founded)),
+        ("Kto założył firmę?", founder),
+        ("Kto jest prezesem zarządu?", boss),
+        ("Od którego roku pełni funkcję prezes?", str(since)),
+        ("Ile osób zatrudnia firma?", str(staff)),
+        ("Ile wynosi roczna produkcja?", str(output)),
+        ("Ile zakładów produkcyjnych ma firma?", str(plants)),
+        ("Na ile rynków zagranicznych firma eksportuje?", str(markets)),
+        ("W jakim mieście mieści się siedziba firmy?", town),
+        ("W jakim województwie mieści się siedziba firmy?", region),
+        ("Ile patentów zgłosiła firma?", str(patents)),
+        ("Jak nazywa się oddział zagraniczny?", branch),
+        ("W którym roku uruchomiono oddział zagraniczny?", str(branch_year)),
+        ("Ile wynosi roczny przychód?", str(revenue)),
+        ("Ile wynosi powierzchnia hali produkcyjnej?", str(hall)),
+    ]
+    return ctx, qa
+
+
+COPY_DRILL_BUILDERS = [_town, _scholar, _company]
+
+
+def copy_drill_examples(count=COPY_DRILL_COUNT, seed=2):
+    """Long contexts packed with same-type distractors, one question each.
+
+    One question per context rather than all of them, so the model never sees
+    the same paragraph twice in a row and cannot start answering from position
+    alone. Which question is asked is drawn independently, so across the set
+    every slot — early, middle and late in the paragraph — gets asked about.
+    """
+    rng = np.random.default_rng(seed)
+    out = []
+    while len(out) < count:
+        build = COPY_DRILL_BUILDERS[int(rng.integers(len(COPY_DRILL_BUILDERS)))]
+        ctx, qa = build(rng)
+        q, a = qa[int(rng.integers(len(qa)))]
+        out.append((ctx, q, a))
+    return out
+
+
 def list_examples(seed=1):
     """Synthetic "list N things" instructions with correct, varied answers.
 
@@ -393,6 +606,27 @@ def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
             kept += 1
             if kept % 10000 == 0:
                 print(f"  {kept:,} kept", flush=True)
+
+    drill_kept = drill_dropped = 0
+    for context, question, answer in copy_drill_examples():
+        made = format_context_example(context, question, answer)
+        if made is None:
+            drill_dropped += 1
+            continue
+        prompt, reply = made
+        p_ids = tok.encode(prompt).ids
+        r_ids = tok.encode(reply).ids
+        ids = p_ids + r_ids
+        if len(ids) > max_len:
+            drill_dropped += 1
+            continue
+        mask = np.zeros(len(ids), dtype=np.uint8)
+        mask[len(p_ids):] = 1
+        token_buf.append(np.asarray(ids, dtype=np.uint16))
+        mask_buf.append(mask)
+        drill_kept += 1
+    kept += drill_kept
+    print(f"copy drills: {drill_kept:,} kept, {drill_dropped:,} dropped", flush=True)
 
     list_kept = 0
     for instruction, output in list_examples():
