@@ -105,7 +105,9 @@ CONTEXT_CASES = [
     (_NORTEM, "Gdzie mieści się siedziba firmy Nortem?", ["Gdyn"], "name"),
     (_CASTLE, "Kto zbudował zamek w Bąkowie?", ["Warkosz"], "name"),
     (_SCHOOL, "Kto jest dyrektorem szkoły?", ["Ostrowski"], "name"),
-    (_LAB, "Gdzie mieści się laboratorium Wega?", ["Toruni"], "name"),
+    # "w Toruń" is the right city in the wrong case, and scoring it as a miss
+    # measured Polish declension rather than whether the model read the text.
+    (_LAB, "Gdzie mieści się laboratorium Wega?", ["Toruni", "Toruń", "Torun"], "name"),
     (_MUSEUM, "Kto jest kuratorem zbiorów?", ["Wielgus"], "name"),
     (_RIVER, "Do jakiej rzeki wpada Skawica?", ["Skaw"], "name"),
 ]

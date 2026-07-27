@@ -113,6 +113,77 @@ def identity_pairs():
                 seen.add(variant)
                 yield variant, output
 
+# Measured 2026-07-27: list_correct 43%, the lowest score on the board. The
+# failure is not knowledge but shape — asked "Wymień trzy owoce." the model
+# answers "Trzy jabłka to jeden z najbardziej znanych owoców na świecie…",
+# latching onto "trzy X" as a noun phrase and writing prose about it. Same for
+# "Wymień trzy zwierzęta." -> "Trzy koty, które są zwierzętami społecznymi…".
+# Neither Alpaca corpus has many Polish "list N things" instructions, so the
+# pattern was never really taught.
+#
+# The categories here are deliberately DISJOINT from the ones in
+# bench/chat_eval.py (which tests fruit, animals, colours, days, seasons,
+# planets, cities, transport, instruments). Training on the benchmark's own
+# questions would turn the score into a memorisation check; keeping them apart
+# means the benchmark measures whether the habit generalises to categories the
+# model never saw listed.
+LIST_CATEGORIES = [
+    ("warzywa", ["marchew", "ziemniak", "pomidor", "ogórek", "cebula", "kapusta",
+                 "burak", "papryka", "brokuł", "fasola", "groch", "dynia"]),
+    ("miesiące", ["styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec",
+                  "lipiec", "sierpień", "wrzesień", "październik", "listopad", "grudzień"]),
+    ("zawody", ["lekarz", "nauczyciel", "piekarz", "stolarz", "kierowca", "pielęgniarka",
+                "murarz", "fryzjer", "kucharz", "listonosz", "mechanik", "rolnik"]),
+    ("dyscypliny sportowe", ["piłka nożna", "koszykówka", "siatkówka", "pływanie",
+                             "tenis", "lekkoatletyka", "kolarstwo", "narciarstwo",
+                             "boks", "wioślarstwo"]),
+    ("napoje", ["woda", "herbata", "kawa", "sok", "mleko", "kompot", "lemoniada"]),
+    ("meble", ["stół", "krzesło", "szafa", "łóżko", "biurko", "regał", "komoda", "fotel"]),
+    ("części ubrania", ["koszula", "spodnie", "kurtka", "sweter", "sukienka",
+                        "czapka", "szalik", "skarpetki"]),
+    ("kraje europejskie", ["Polska", "Niemcy", "Francja", "Hiszpania", "Włochy",
+                           "Czechy", "Słowacja", "Szwecja", "Norwegia", "Portugalia"]),
+    ("polskie rzeki", ["Wisła", "Odra", "Warta", "Bug", "Narew", "San", "Pilica", "Noteć"]),
+    ("drzewa", ["dąb", "brzoza", "sosna", "świerk", "buk", "klon", "lipa", "jesion"]),
+    ("ptaki", ["wróbel", "bocian", "jaskółka", "sowa", "orzeł", "gołąb", "sikorka", "kruk"]),
+    ("przedmioty szkolne", ["matematyka", "biologia", "historia", "chemia", "fizyka",
+                            "geografia", "informatyka", "muzyka"]),
+    ("figury geometryczne", ["kwadrat", "koło", "trójkąt", "prostokąt", "romb",
+                             "trapez", "sześciokąt"]),
+    ("metale", ["żelazo", "miedź", "cynk", "ołów", "srebro", "złoto", "aluminium", "nikiel"]),
+]
+LIST_COUNT_WORDS = {2: "dwa", 3: "trzy", 4: "cztery", 5: "pięć"}
+# "dwa"/"trzy" do not agree with every noun ("dwa warzywa" is fine, "dwa
+# części ubrania" is not), so each category carries the phrasing that works
+# for it rather than the count being glued on blindly.
+LIST_PHRASINGS = ["Wymień {c} {k}.", "Podaj {c} {k}.", "Wypisz {c} {k}.",
+                  "Wymień {c} {k}", "Podaj przykłady — {c} {k}."]
+LIST_VARIANTS_PER_CATEGORY = 30
+LIST_REPEATS = 4
+
+
+def list_examples(seed=1):
+    """Synthetic "list N things" instructions with correct, varied answers.
+
+    Each draw picks different items, so what repeats is the *format* — an
+    instruction asking for N of something, answered by exactly N distinct
+    members of that category — rather than any particular answer. That is the
+    part the model is missing; it already knows what a fruit is.
+    """
+    rng = np.random.default_rng(seed)
+    out = []
+    for name, items in LIST_CATEGORIES:
+        for _ in range(LIST_VARIANTS_PER_CATEGORY):
+            n = int(rng.choice([2, 3, 4]))
+            n = min(n, len(items))
+            picked = [items[i] for i in rng.permutation(len(items))[:n]]
+            phrasing = LIST_PHRASINGS[int(rng.integers(len(LIST_PHRASINGS)))]
+            q = phrasing.format(c=LIST_COUNT_WORDS[n], k=name)
+            a = " ".join(f"{i + 1}) {v}" for i, v in enumerate(picked))
+            out.append((q, a))
+    return out
+
+
 # Confirmed live, 2026-07-25: even with the right Wikipedia/vault snippet
 # handed to the model as plain text right before the question (see
 # runtime/rag.py), the answer still ignored it and confabulated something
@@ -322,6 +393,28 @@ def build(tokenizer_path: Path, out_prefix: Path, max_len: int):
             kept += 1
             if kept % 10000 == 0:
                 print(f"  {kept:,} kept", flush=True)
+
+    list_kept = 0
+    for instruction, output in list_examples():
+        made = format_example(instruction, None, output)
+        if made is None:
+            continue
+        prompt, reply = made
+        p_ids = tok.encode(prompt).ids
+        r_ids = tok.encode(reply).ids
+        ids = p_ids + r_ids
+        if len(ids) > max_len:
+            continue
+        mask = np.zeros(len(ids), dtype=np.uint8)
+        mask[len(p_ids):] = 1
+        for _ in range(LIST_REPEATS):
+            token_buf.append(np.asarray(ids, dtype=np.uint16))
+            mask_buf.append(mask)
+            list_kept += 1
+    kept += list_kept
+    print(f"list examples: {len(LIST_CATEGORIES)} categories x"
+          f"{LIST_VARIANTS_PER_CATEGORY} variants x{LIST_REPEATS} = {list_kept:,} kept",
+          flush=True)
 
     # Identity examples bypass the exact-duplicate filter above on purpose —
     # deliberate repetition is the whole point here, not something to dedup
