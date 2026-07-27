@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MicroG</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="titlebar">
+  <button id="history-trigger" class="chrome-btn" title="Conversations (⌘K)" aria-label="Conversations">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+  </button>
+  <div class="brand mono">
+    <span>MicroG</span>
+    <b id="brand-params">—</b>
+    <span id="brand-speed"></span>
+  </div>
+  <button id="settings-trigger" class="chrome-btn" title="Settings (⌘,)" aria-label="Settings">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.4 3.6l-1.4 1.4M5 9.6l-1.4 1.4M12.4 12.4l-1.4-1.4M5 6.4L3.6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+  </button>
+</div>
+
+<div id="sidebar-scrim"></div>
+<aside id="sidebar" aria-hidden="true">
+  <div id="sidebar-header">
+    <span class="title">Conversations</span>
+    <button id="sidebar-new" title="New conversation (⌘N)" aria-label="New conversation">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div id="sidebar-list"></div>
+</aside>
+
+<main id="shell">
+  <section id="conversation-pane">
+    <div id="messages">
+      <div id="empty-cursor"></div>
+    </div>
+    <div id="input-bar">
+      <textarea id="input-field" rows="1" placeholder="" spellcheck="false"></textarea>
+      <button id="send-btn" class="disabled" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <section id="panel-pane">
+    <nav id="tabs" role="tablist">
+      <button class="tab" data-tab="neurons" role="tab" aria-selected="true">
+        Neurons<span class="indicator"></span>
+      </button>
+      <button class="tab" data-tab="probabilities" role="tab" aria-selected="false">
+        Probabilities<span class="indicator" style="opacity:0"></span>
+      </button>
+    </nav>
+    <div class="panel-body">
+      <div id="neurons-view" class="panel-view active">
+        <div id="neurons-wrap">
+          <canvas id="neurons-canvas"></canvas>
+          <div id="neuron-tooltip"></div>
+          <div id="pinned-chart">
+            <div class="label"><span id="pinned-label">—</span><span id="pinned-unpin" style="cursor:pointer">unpin ✕</span></div>
+            <canvas id="pinned-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+      <div id="probabilities-view" class="panel-view">
+        <div id="prob-bars"></div>
+        <div id="confidence">
+          <div class="row">
+            <span class="label">Confidence</span>
+            <span class="state mono" id="confidence-state">—</span>
+          </div>
+          <div class="track"><div class="fill" id="confidence-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="settings-popover">
+  <div class="setting-row">
+    <div class="label"><span>Temperature</span><span class="val mono" id="temp-val">0.80</span></div>
+    <input type="range" id="temp-range" min="0.1" max="1.5" step="0.05" value="0.8">
+  </div>
+  <div class="setting-row">
+    <div class="label"><span>Top-k</span><span class="val mono" id="topk-val">50</span></div>
+    <input type="range" id="topk-range" min="1" max="200" step="1" value="50">
+  </div>
+  <div class="setting-row toggle-row">
+    <div>
+      <div class="label" style="margin-bottom:2px"><span>Use notes (RAG)</span></div>
+      <div class="setting-hint" style="max-width:170px">Retrieves from your vault before answering. Sources aren't shown — verify anything factual.</div>
+    </div>
+    <div class="toggle" id="rag-toggle"></div>
+  </div>
+</div>
+
+<div id="wake-overlay">
+  <canvas id="wake-canvas"></canvas>
+  <div id="wake-label" class="mono">loading weights</div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -19,3 +19,6 @@ Niepotrzebne/
 __pycache__/
 *.pyc
 .DS_Store
+
+# electron deps (regenerable via npm install)
+app/node_modules/
