@@ -80,6 +80,26 @@ representation precision at 110M, not a data shortage. **Do not spend another
 round on it.** Improving factual numbers means either a bigger model or
 extracting the value in the app rather than asking the model to reproduce it.
 
+### Chain-of-thought: measured and rejected
+
+Asked 2026-07-27 whether the model should be taught to "think" before
+answering. Free-form CoT is an emergent ability — below a few billion
+parameters it usually hurts, because the model produces confident wrong steps
+and the errors compound. This model cannot compute 2+2 and drops the fourth
+digit of a number it is copying, so carrying intermediate values across a
+reasoning chain is strictly harder than what it already fails at.
+
+The one variant with a plausible mechanism was "quote the source sentence,
+then answer" — not reasoning, but splitting one hard operation (find a value
+600 characters back and reproduce it) into two easy ones (copy a sentence,
+then copy from what you just wrote). It rests on the answer being easier to
+reproduce when it sits nearby.
+
+That assumption was tested directly, no training needed: same contexts, same
+distractors, same length, with the sentence holding the answer moved to the
+end. Accuracy went **44% → 33%**, numbers stayed 1/4. Position is not the
+problem, so the scaffold has nothing to exploit. Do not spend a round on it.
+
 ## The benchmark lies more often than the model does
 
 Five times on 2026-07-27 a "model failure" was a measurement bug, and once it
