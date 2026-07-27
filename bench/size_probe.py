@@ -29,8 +29,11 @@ from model.gpt import GPT, GPTConfig  # noqa: E402
 # (label, n_layer, n_head, n_embd). head_dim stays 64 throughout, as in MicroG.
 CANDIDATES = [
     ("MicroG 110M (baseline)", 12, 12, 768),
-    ("MiniG 284M",             20, 16, 1024),
-    ("MiniG 513M",             24, 20, 1280),
+    ("kandydat 150M",          16, 12, 768),
+    ("kandydat 190M",          16, 14, 896),
+    ("kandydat 230M",          18, 14, 896),
+    ("MiniG 282M",             20, 16, 1024),
+    ("CoreG 517M",             24, 20, 1280),
 ]
 BLOCK = 1024
 STEPS = 3          # optimiser steps timed (each is ACCUM micro-batches)
