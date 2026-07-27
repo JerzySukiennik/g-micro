@@ -1,4 +1,4 @@
-# Trening MicroG na Kaggle — instrukcja
+# Trening G-Micro na Kaggle — instrukcja
 
 Kaggle daje **30 h GPU tygodniowo za darmo**, w tym T4 ×2. To wystarczy na cały trening. Sesja jest ucinana po 12 h i może paść wcześniej bez ostrzeżenia, więc wszystko poniżej jest zbudowane pod wznawianie.
 

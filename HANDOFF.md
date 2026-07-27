@@ -1,4 +1,4 @@
-# MicroG — Handoff
+# G-Micro — Handoff
 
 Rewritten 2026-07-27 (the previous version was three days stale and cost the
 next session twenty minutes rediscovering work that was already done — keep
@@ -12,8 +12,8 @@ run offline afterwards on his Intel MacBook Pro (i9, no CUDA/MLX). Slogan:
 "100M parameters. 100% Gzowo." Dual goal: a working model **and** Jurek
 understanding every layer (`WALKTHROUGH.md`).
 
-Repo: `github.com/JerzySukiennik/microg`. Local:
-`/Users/jurek/Downloads/Claude/Projects/AIe/MicroG`.
+Repo: `github.com/JerzySukiennik/g-micro`. Local:
+`/Users/jurek/Downloads/Claude/Projects/AIe/G-Micro`.
 
 ## Current state
 
@@ -129,7 +129,7 @@ shortcut away (⌥⌘D) — **do not delete it**, it is half the point of the
 project; Jurek was told it was kept and can still ask for it to go.
 
 `runtime/server.py` is the WebSocket backend on port 8899; Electron spawns and
-kills it. Launch with `npm start` in `app/`. `/Applications/MicroG.app` is a
+kills it. Launch with `npm start` in `app/`. `/Applications/G-Micro.app` is a
 thin launcher stub, not a packaged build — deliberate.
 
 ### RAG — fixed, and now genuinely useful
@@ -154,8 +154,8 @@ Orchestration lives in `Niepotrzebne/kaggle-orchestration/` (gitignored, local
 only). To run another SFT round:
 
 ```bash
-cd "/Users/jurek/Downloads/Claude/Projects/AIe/MicroG/Niepotrzebne/kaggle-orchestration"
-/Users/jurek/Downloads/Claude/Projects/AIe/MicroG/.venv/bin/python run_finetune.py
+cd "/Users/jurek/Downloads/Claude/Projects/AIe/G-Micro/Niepotrzebne/kaggle-orchestration"
+/Users/jurek/Downloads/Claude/Projects/AIe/G-Micro/.venv/bin/python run_finetune.py
 ```
 
 One-shot, bounded, safe to leave. ~50-70 minutes. **The kernel does

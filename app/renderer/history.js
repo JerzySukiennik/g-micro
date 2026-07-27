@@ -39,7 +39,7 @@ export class History {
   }
 
   async refresh() {
-    const items = await window.microg.history.list();
+    const items = await window.g-micro.history.list();
     this.list.innerHTML = '';
     if (!items.length) {
       this.list.innerHTML = '<div class="conv-empty">No conversations yet.<br>Start typing to begin one.</div>';

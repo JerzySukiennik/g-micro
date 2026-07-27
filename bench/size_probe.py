@@ -1,9 +1,9 @@
 """How large a model can this GPU actually train, and how fast?
 
-Written 2026-07-27 while sizing MiniG, MicroG's larger successor. The choice
+Written 2026-07-27 while sizing G-Mini, G-Micro's larger successor. The choice
 between "284M trained to the Chinchilla optimum" and "513M trained short" is a
 choice between two-and-a-half and eight weeks of Kaggle quota, and every hour
-estimate so far has been extrapolated from MicroG's single data point. This
+estimate so far has been extrapolated from G-Micro's single data point. This
 measures the two candidates directly instead: real parameter counts, real
 peak memory against the T4's 16GB, and real tokens per second.
 
@@ -26,12 +26,12 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from model.gpt import GPT, GPTConfig  # noqa: E402
 
-# (label, n_layer, n_head, n_embd). head_dim stays 64 throughout, as in MicroG.
+# (label, n_layer, n_head, n_embd). head_dim stays 64 throughout, as in G-Micro.
 CANDIDATES = [
-    ("MicroG 110M (baseline)", 12, 12, 768),
+    ("G-Micro 110M (baseline)", 12, 12, 768),
     ("kandydat 185M",          16, 14, 896),
     ("kandydat 204M",          18, 14, 896),
-    ("MiniG 282M",             20, 16, 1024),
+    ("G-Mini 282M",             20, 16, 1024),
 ]
 BLOCK = int(__import__("os").environ.get("PROBE_BLOCK", 1024))
 STEPS = 3          # optimiser steps timed (each is ACCUM micro-batches)
@@ -40,13 +40,13 @@ WARMUP = 1
 # batch 8 x grad_accum 8 x block 1024) so the optimiser runs once per eight
 # micro-batches. A first version of this probe stepped the optimiser after
 # every micro-batch and came out roughly 2x pessimistic — it predicted 21h for
-# MicroG's 2B tokens where the real run took about 10. Matching the real step
+# G-Micro's 2B tokens where the real run took about 10. Matching the real step
 # size is the difference between a usable estimate and a misleading one.
 TOKENS_PER_STEP = 65536
 
 
 def ffn_hidden(n_embd):
-    """MicroG's ratio: ~8/3 x n_embd, rounded to a multiple of 128."""
+    """G-Micro's ratio: ~8/3 x n_embd, rounded to a multiple of 128."""
     return int(round(n_embd * 8 / 3 / 128) * 128)
 
 
@@ -123,7 +123,7 @@ def main():
             print(f"{label:<26} nie mieści się nawet przy micro_batch=1")
 
     # Single-GPU numbers above; training runs DataParallel across both cards,
-    # which measured ~1.7x on MicroG rather than 2x.
+    # which measured ~1.7x on G-Micro rather than 2x.
     DP = 1.7
     print(f"\nprzewidywany czas treningu (DataParallel x{DP}, obie karty):")
     print(f"{'model':<26}{'tok/param':>10}{'tokenów':>10}{'godzin':>9}{'tygodni quoty':>15}")

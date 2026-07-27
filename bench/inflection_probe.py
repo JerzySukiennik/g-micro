@@ -1,5 +1,5 @@
 """
-Inflection probe: does MicroG prefer grammatically correct Polish over a
+Inflection probe: does G-Micro prefer grammatically correct Polish over a
 minimally-broken variant of the same sentence?
 
 Scores each pair in inflection_pairs.PAIRS by total log-likelihood under

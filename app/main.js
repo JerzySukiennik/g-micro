@@ -1,5 +1,5 @@
 /**
- * MicroG — Electron main process.
+ * G-Micro — Electron main process.
  *
  * Owns the whole lifecycle of the Python backend, per UI-SPEC.md
  * "Powłoka i architektura": launch spawns it, quit kills it, and a PID-file

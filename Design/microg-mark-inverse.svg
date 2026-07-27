@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 212" width="310" height="212" role="img" aria-label="MicroG">
-  <title>MicroG</title>
-  <!-- Same geometry as microg-mark.svg, black for light backgrounds. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 212" width="310" height="212" role="img" aria-label="G-Micro">
+  <title>G-Micro</title>
+  <!-- Same geometry as g-micro-mark.svg, black for light backgrounds. -->
   <g fill="none" stroke="#000" stroke-width="15" stroke-linecap="butt" stroke-linejoin="round" transform="translate(0,11)">
     <path d="M60 74 L60 172"/>
     <path d="M60 104 Q60 140 96 140 Q132 140 132 104 L132 74"/>

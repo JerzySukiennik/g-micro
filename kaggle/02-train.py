@@ -25,7 +25,7 @@ import subprocess
 import sys
 import glob
 
-REPO = "https://github.com/JerzySukiennik/microg.git"
+REPO = "https://github.com/JerzySukiennik/g-micro.git"
 WORK = "/kaggle/working"
 OUT = f"{WORK}/run"
 
@@ -41,15 +41,15 @@ OUT = f"{WORK}/run"
 # accepting ~22h across 2 resumable sessions rather than chasing it further.
 BATCH, ACCUM, STEPS, WARMUP = 16, 30, 4060, 200
 
-if os.path.exists(f"{WORK}/microg"):
+if os.path.exists(f"{WORK}/g-micro"):
     # A stale checkout from an earlier attempt in this same session would
     # silently run old code even after this script itself was re-fetched —
     # that is exactly what ran a T4 session at half speed on the bf16 fix.
     # Pulling forces the checkout to match what curl just downloaded.
-    subprocess.run(["git", "-C", f"{WORK}/microg", "pull", "--ff-only"], check=True)
+    subprocess.run(["git", "-C", f"{WORK}/g-micro", "pull", "--ff-only"], check=True)
 else:
-    subprocess.run(["git", "clone", "--depth", "1", REPO, f"{WORK}/microg"], check=True)
-os.chdir(f"{WORK}/microg")
+    subprocess.run(["git", "clone", "--depth", "1", REPO, f"{WORK}/g-micro"], check=True)
+os.chdir(f"{WORK}/g-micro")
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "tokenizers"], check=True)
 
 # ------------------------------------------------------------------- data --

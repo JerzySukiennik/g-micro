@@ -108,7 +108,7 @@ def search_vault(query: str, snippet_chars: int = 600):
 # Wikipedia's API rejects requests with no User-Agent (or Python's default
 # one) as of their current bot-traffic policy — a bare urlopen() call gets
 # a flat 403, confirmed directly against the live API.
-_HEADERS = {"User-Agent": "MicroG/1.0 (hobby Polish LLM project; local personal use)"}
+_HEADERS = {"User-Agent": "G-Micro/1.0 (hobby Polish LLM project; local personal use)"}
 
 
 # Questions about the assistant itself must never hit retrieval. Confirmed

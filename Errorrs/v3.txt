@@ -6,16 +6,151 @@
 10.4s 6 0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
 10.4s 7 0.00s - to python to disable frozen modules.
 10.4s 8 0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
-12.4s 9 Cloning into '/kaggle/working/microg'...
+12.4s 9 Cloning into '/kaggle/working/g-micro'...
 13.0s 10 remote: Enumerating objects: 44, done.[K
-13.0s 11 remote: Counting objects:   2% (1/44)[Kremote: Counting objects:   4% (2/44)[Kremote: Counting objects:   6% (3/44)[Kremote: Counting objects:   9% (4/44)[Kremote: Counting objects:  11% (5/44)[Kremote: Counting objects:  13% (6/44)[Kremote: Counting objects:  15% (7/44)[Kremote: Counting objects:  18% (8/44)[Kremote: Counting objects:  20% (9/44)[Kremote: Counting objects:  22% (10/44)[Kremote: Counting objects:  25% (11/44)[Kremote: Counting objects:  27% (12/44)[Kremote: Counting objects:  29% (13/44)[Kremote: Counting objects:  31% (14/44)[Kremote: Counting objects:  34% (15/44)[Kremote: Counting objects:  36% (16/44)[Kremote: Counting objects:  38% (17/44)[Kremote: Counting objects:  40% (18/44)[Kremote: Counting objects:  43% (19/44)[Kremote: Counting objects:  45% (20/44)[Kremote: Counting objects:  47% (21/44)[Kremote: Counting objects:  50% (22/44)[Kremote: Counting objects:  52% (23/44)[Kremote: Counting objects:  54% (24/44)[Kremote: Counting objects:  56% (25/44)[Kremote: Counting objects:  59% (26/44)[Kremote: Counting objects:  61% (27/44)[Kremote: Counting objects:  63% (28/44)[Kremote: Counting objects:  65% (29/44)[Kremote: Counting objects:  68% (30/44)[Kremote: Counting objects:  70% (31/44)[Kremote: Counting objects:  72% (32/44)[Kremote: Counting objects:  75% (33/44)[Kremote: Counting objects:  77% (34/44)[Kremote: Counting objects:  79% (35/44)[Kremote: Counting objects:  81% (36/44)[Kremote: Counting objects:  84% (37/44)[Kremote: Counting objects:  86% (38/44)[Kremote: Counting objects:  88% (39/44)[Kremote: Counting objects:  90% (40/44)[Kremote: Counting objects:  93% (41/44)[Kremote: Counting objects:  95% (42/44)[Kremote: Counting objects:  97% (43/44)[Kremote: Counting objects: 100% (44/44)[Kremote: Counting objects: 100% (44/44), done.[K
-13.1s 12 remote: Compressing objects:   2% (1/37)[Kremote: Compressing objects:   5% (2/37)[Kremote: Compressing objects:   8% (3/37)[Kremote: Compressing objects:  10% (4/37)[Kremote: Compressing objects:  13% (5/37)[Kremote: Compressing objects:  16% (6/37)[Kremote: Compressing objects:  18% (7/37)[Kremote: Compressing objects:  21% (8/37)[Kremote: Compressing objects:  24% (9/37)[Kremote: Compressing objects:  27% (10/37)[Kremote: Compressing objects:  29% (11/37)[Kremote: Compressing objects:  32% (12/37)[Kremote: Compressing objects:  35% (13/37)[Kremote: Compressing objects:  37% (14/37)[Kremote: Compressing objects:  40% (15/37)[Kremote: Compressing objects:  43% (16/37)[Kremote: Compressing objects:  45% (17/37)[Kremote: Compressing objects:  48% (18/37)[Kremote: Compressing objects:  51% (19/37)[Kremote: Compressing objects:  54% (20/37)[Kremote: Compressing objects:  56% (21/37)[Kremote: Compressing objects:  59% (22/37)[Kremote: Compressing objects:  62% (23/37)[Kremote: Compressing objects:  64% (24/37)[Kremote: Compressing objects:  67% (25/37)[Kremote: Compressing objects:  70% (26/37)[Kremote: Compressing objects:  72% (27/37)[Kremote: Compressing objects:  75% (28/37)[Kremote: Compressing objects:  78% (29/37)[Kremote: Compressing objects:  81% (30/37)[Kremote: Compressing objects:  83% (31/37)[Kremote: Compressing objects:  86% (32/37)[Kremote: Compressing objects:  89% (33/37)[Kremote: Compressing objects:  91% (34/37)[Kremote: Compressing objects:  94% (35/37)[Kremote: Compressing objects:  97% (36/37)[Kremote: Compressing objects: 100% (37/37)[Kremote: Compressing objects: 100% (37/37), done.[K
-13.3s 13 Receiving objects:   2% (1/44)Receiving objects:   4% (2/44)Receiving objects:   6% (3/44)Receiving objects:   9% (4/44)Receiving objects:  11% (5/44)Receiving objects:  13% (6/44)Receiving objects:  15% (7/44)Receiving objects:  18% (8/44)Receiving objects:  20% (9/44)Receiving objects:  22% (10/44)Receiving objects:  25% (11/44)Receiving objects:  27% (12/44)Receiving objects:  29% (13/44)Receiving objects:  31% (14/44)Receiving objects:  34% (15/44)Receiving objects:  36% (16/44)Receiving objects:  38% (17/44)Receiving objects:  40% (18/44)Receiving objects:  43% (19/44)Receiving objects:  45% (20/44)Receiving objects:  47% (21/44)Receiving objects:  50% (22/44)Receiving objects:  52% (23/44)Receiving objects:  54% (24/44)Receiving objects:  56% (25/44)Receiving objects:  59% (26/44)Receiving objects:  61% (27/44)Receiving objects:  63% (28/44)Receiving objects:  65% (29/44)Receiving objects:  68% (30/44)Receiving objects:  70% (31/44)remote: Total 44 (delta 8), reused 31 (delta 6), pack-reused 0 (from 0)[K
-13.3s 14 Receiving objects:  72% (32/44)Receiving objects:  75% (33/44)Receiving objects:  77% (34/44)Receiving objects:  79% (35/44)Receiving objects:  81% (36/44)Receiving objects:  84% (37/44)Receiving objects:  86% (38/44)Receiving objects:  88% (39/44)Receiving objects:  90% (40/44)Receiving objects:  93% (41/44)Receiving objects:  95% (42/44)Receiving objects:  97% (43/44)Receiving objects: 100% (44/44)Receiving objects: 100% (44/44), 1018.61 KiB | 7.43 MiB/s, done.
-13.3s 15 Resolving deltas:   0% (0/8)Resolving deltas:  12% (1/8)Resolving deltas:  25% (2/8)Resolving deltas:  37% (3/8)Resolving deltas:  50% (4/8)Resolving deltas:  62% (5/8)Resolving deltas:  75% (6/8)Resolving deltas:  87% (7/8)Resolving deltas: 100% (8/8)Resolving deltas: 100% (8/8), done.
+13.0s 11 remote: Counting objects:   2% (1/44)[K
+remote: Counting objects:   4% (2/44)[K
+remote: Counting objects:   6% (3/44)[K
+remote: Counting objects:   9% (4/44)[K
+remote: Counting objects:  11% (5/44)[K
+remote: Counting objects:  13% (6/44)[K
+remote: Counting objects:  15% (7/44)[K
+remote: Counting objects:  18% (8/44)[K
+remote: Counting objects:  20% (9/44)[K
+remote: Counting objects:  22% (10/44)[K
+remote: Counting objects:  25% (11/44)[K
+remote: Counting objects:  27% (12/44)[K
+remote: Counting objects:  29% (13/44)[K
+remote: Counting objects:  31% (14/44)[K
+remote: Counting objects:  34% (15/44)[K
+remote: Counting objects:  36% (16/44)[K
+remote: Counting objects:  38% (17/44)[K
+remote: Counting objects:  40% (18/44)[K
+remote: Counting objects:  43% (19/44)[K
+remote: Counting objects:  45% (20/44)[K
+remote: Counting objects:  47% (21/44)[K
+remote: Counting objects:  50% (22/44)[K
+remote: Counting objects:  52% (23/44)[K
+remote: Counting objects:  54% (24/44)[K
+remote: Counting objects:  56% (25/44)[K
+remote: Counting objects:  59% (26/44)[K
+remote: Counting objects:  61% (27/44)[K
+remote: Counting objects:  63% (28/44)[K
+remote: Counting objects:  65% (29/44)[K
+remote: Counting objects:  68% (30/44)[K
+remote: Counting objects:  70% (31/44)[K
+remote: Counting objects:  72% (32/44)[K
+remote: Counting objects:  75% (33/44)[K
+remote: Counting objects:  77% (34/44)[K
+remote: Counting objects:  79% (35/44)[K
+remote: Counting objects:  81% (36/44)[K
+remote: Counting objects:  84% (37/44)[K
+remote: Counting objects:  86% (38/44)[K
+remote: Counting objects:  88% (39/44)[K
+remote: Counting objects:  90% (40/44)[K
+remote: Counting objects:  93% (41/44)[K
+remote: Counting objects:  95% (42/44)[K
+remote: Counting objects:  97% (43/44)[K
+remote: Counting objects: 100% (44/44)[K
+remote: Counting objects: 100% (44/44), done.[K
+13.1s 12 remote: Compressing objects:   2% (1/37)[K
+remote: Compressing objects:   5% (2/37)[K
+remote: Compressing objects:   8% (3/37)[K
+remote: Compressing objects:  10% (4/37)[K
+remote: Compressing objects:  13% (5/37)[K
+remote: Compressing objects:  16% (6/37)[K
+remote: Compressing objects:  18% (7/37)[K
+remote: Compressing objects:  21% (8/37)[K
+remote: Compressing objects:  24% (9/37)[K
+remote: Compressing objects:  27% (10/37)[K
+remote: Compressing objects:  29% (11/37)[K
+remote: Compressing objects:  32% (12/37)[K
+remote: Compressing objects:  35% (13/37)[K
+remote: Compressing objects:  37% (14/37)[K
+remote: Compressing objects:  40% (15/37)[K
+remote: Compressing objects:  43% (16/37)[K
+remote: Compressing objects:  45% (17/37)[K
+remote: Compressing objects:  48% (18/37)[K
+remote: Compressing objects:  51% (19/37)[K
+remote: Compressing objects:  54% (20/37)[K
+remote: Compressing objects:  56% (21/37)[K
+remote: Compressing objects:  59% (22/37)[K
+remote: Compressing objects:  62% (23/37)[K
+remote: Compressing objects:  64% (24/37)[K
+remote: Compressing objects:  67% (25/37)[K
+remote: Compressing objects:  70% (26/37)[K
+remote: Compressing objects:  72% (27/37)[K
+remote: Compressing objects:  75% (28/37)[K
+remote: Compressing objects:  78% (29/37)[K
+remote: Compressing objects:  81% (30/37)[K
+remote: Compressing objects:  83% (31/37)[K
+remote: Compressing objects:  86% (32/37)[K
+remote: Compressing objects:  89% (33/37)[K
+remote: Compressing objects:  91% (34/37)[K
+remote: Compressing objects:  94% (35/37)[K
+remote: Compressing objects:  97% (36/37)[K
+remote: Compressing objects: 100% (37/37)[K
+remote: Compressing objects: 100% (37/37), done.[K
+13.3s 13 Receiving objects:   2% (1/44)
+Receiving objects:   4% (2/44)
+Receiving objects:   6% (3/44)
+Receiving objects:   9% (4/44)
+Receiving objects:  11% (5/44)
+Receiving objects:  13% (6/44)
+Receiving objects:  15% (7/44)
+Receiving objects:  18% (8/44)
+Receiving objects:  20% (9/44)
+Receiving objects:  22% (10/44)
+Receiving objects:  25% (11/44)
+Receiving objects:  27% (12/44)
+Receiving objects:  29% (13/44)
+Receiving objects:  31% (14/44)
+Receiving objects:  34% (15/44)
+Receiving objects:  36% (16/44)
+Receiving objects:  38% (17/44)
+Receiving objects:  40% (18/44)
+Receiving objects:  43% (19/44)
+Receiving objects:  45% (20/44)
+Receiving objects:  47% (21/44)
+Receiving objects:  50% (22/44)
+Receiving objects:  52% (23/44)
+Receiving objects:  54% (24/44)
+Receiving objects:  56% (25/44)
+Receiving objects:  59% (26/44)
+Receiving objects:  61% (27/44)
+Receiving objects:  63% (28/44)
+Receiving objects:  65% (29/44)
+Receiving objects:  68% (30/44)
+Receiving objects:  70% (31/44)
+remote: Total 44 (delta 8), reused 31 (delta 6), pack-reused 0 (from 0)[K
+13.3s 14 Receiving objects:  72% (32/44)
+Receiving objects:  75% (33/44)
+Receiving objects:  77% (34/44)
+Receiving objects:  79% (35/44)
+Receiving objects:  81% (36/44)
+Receiving objects:  84% (37/44)
+Receiving objects:  86% (38/44)
+Receiving objects:  88% (39/44)
+Receiving objects:  90% (40/44)
+Receiving objects:  93% (41/44)
+Receiving objects:  95% (42/44)
+Receiving objects:  97% (43/44)
+Receiving objects: 100% (44/44)
+Receiving objects: 100% (44/44), 1018.61 KiB | 7.43 MiB/s, done.
+13.3s 15 Resolving deltas:   0% (0/8)
+Resolving deltas:  12% (1/8)
+Resolving deltas:  25% (2/8)
+Resolving deltas:  37% (3/8)
+Resolving deltas:  50% (4/8)
+Resolving deltas:  62% (5/8)
+Resolving deltas:  75% (6/8)
+Resolving deltas:  87% (7/8)
+Resolving deltas: 100% (8/8)
+Resolving deltas: 100% (8/8), done.
 18.9s 16 no HF token (BackendError) — downloading anonymously, slower
 23.9s 17 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-24.0s 18 README.md: 0.00B [00:00, ?B/s]README.md: 131kB [00:00, 99.1MB/s]
+24.0s 18 README.md: 0.00B [00:00, ?B/s]
+README.md: 131kB [00:00, 99.1MB/s]
 35.7s 19 20,000 docs      160.7M chars  (~46M tokens)
 38.1s 20 40,000 docs      260.9M chars  (~75M tokens)
 40.2s 21 60,000 docs      347.2M chars  (~99M tokens)
@@ -71,8 +206,10 @@
 183.9s 71 kept 1,019,160 docs, skipped 568,561 short ones
 183.9s 72 2499.7M chars  ~714M tokens (rough)
 185.8s 73 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-186.0s 74 README.md: 0.00B [00:00, ?B/s]README.md: 329kB [00:00, 108MB/s]
-189.0s 75 Resolving data files:   0%|                              | 0/55 [00:00<?, ?it/s]Resolving data files: 100%|██████████████████| 55/55 [00:00<00:00, 23054.84it/s]
+186.0s 74 README.md: 0.00B [00:00, ?B/s]
+README.md: 329kB [00:00, 108MB/s]
+189.0s 75 Resolving data files:   0%|                              | 0/55 [00:00<?, ?it/s]
+Resolving data files: 100%|██████████████████| 55/55 [00:00<00:00, 23054.84it/s]
 199.4s 76 20,000 docs      102.0M chars  (~29M tokens)
 202.8s 77 40,000 docs      173.4M chars  (~50M tokens)
 205.7s 78 60,000 docs      240.0M chars  (~69M tokens)

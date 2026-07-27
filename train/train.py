@@ -1,5 +1,5 @@
 """
-Pretraining loop for MicroG.
+Pretraining loop for G-Micro.
 
 Designed around one hard constraint: free Kaggle/Colab sessions die after a few
 hours, without warning. So every piece of state that the run depends on —

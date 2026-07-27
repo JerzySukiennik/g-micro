@@ -1,4 +1,4 @@
-# Jak działa MicroG — walkthrough
+# Jak działa G-Micro — walkthrough
 
 Przewodnik po `model/gpt.py`, warstwa po warstwie. Nie streszczenie — wyjaśnienie *dlaczego* każda część jest taka, a nie inna.
 

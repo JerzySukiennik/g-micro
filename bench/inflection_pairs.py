@@ -1,5 +1,5 @@
 """
-Hand-written minimal pairs for the MicroG inflection probe.
+Hand-written minimal pairs for the G-Micro inflection probe.
 
 Each pair is identical except for one grammatical choice: a case ending,
 a verb-person agreement, or an adjective-noun gender match. `correct` is

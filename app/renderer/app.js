@@ -1,5 +1,5 @@
 /**
- * MicroG — renderer entry point. Wires the WebSocket protocol (see
+ * G-Micro — renderer entry point. Wires the WebSocket protocol (see
  * runtime/server.py's module docstring for the message shapes) to every
  * view module, and owns app-level state: which conversation is open, what
  * the panel tabs are doing, and the retry-once-silently error policy from
@@ -165,7 +165,7 @@ $('#messages').addEventListener('click', (e) => {
 });
 
 async function loadConversation(id) {
-  const conv = await window.microg.history.load(id);
+  const conv = await window.g-micro.history.load(id);
   if (!conv) return;
   currentConvId = id;
   messages = conv.messages || [];
@@ -189,7 +189,7 @@ function startNewConversation() {
 async function persistConversation() {
   if (!messages.length) return;
   const title = messages[0]?.text?.slice(0, 60) || 'Untitled';
-  const id = await window.microg.history.save({
+  const id = await window.g-micro.history.save({
     id: currentConvId, title, updated: Date.now(), messages,
   });
   currentConvId = id;
@@ -285,9 +285,9 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-window.microg?.onShortcut?.('new', startNewConversation);
-window.microg?.onShortcut?.('history', () => history.toggle());
-window.microg?.onShortcut?.('panel', toggleInstrumentPanel);
+window.g-micro?.onShortcut?.('new', startNewConversation);
+window.g-micro?.onShortcut?.('history', () => history.toggle());
+window.g-micro?.onShortcut?.('panel', toggleInstrumentPanel);
 
 // --------------------------------------------------------------- WS wiring --
 function connect() {

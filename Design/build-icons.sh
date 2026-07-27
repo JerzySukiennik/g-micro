@@ -1,5 +1,5 @@
 #!/bin/bash
-# Assemble MicroG.icns from the rendered PNGs.
+# Assemble G-Micro.icns from the rendered PNGs.
 #
 # The PNGs come from rasterize.html, not from qlmanage. QuickLook composites
 # SVG onto an opaque white background, so its "transparent" output was a white
@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 OUT=assets
-ICONSET="$OUT/MicroG.iconset"
+ICONSET="$OUT/G-Micro.iconset"
 
 for s in 16 32 64 128 256 512 1024; do
   [ -f "$OUT/icon-$s.png" ] || { echo "missing $OUT/icon-$s.png — render first"; exit 1; }
@@ -34,7 +34,7 @@ cp "$OUT/icon-512.png"  "$ICONSET/icon_256x256@2x.png"
 cp "$OUT/icon-512.png"  "$ICONSET/icon_512x512.png"
 cp "$OUT/icon-1024.png" "$ICONSET/icon_512x512@2x.png"
 
-iconutil -c icns "$ICONSET" -o "$OUT/MicroG.icns"
+iconutil -c icns "$ICONSET" -o "$OUT/G-Micro.icns"
 
-echo "built $OUT/MicroG.icns"
+echo "built $OUT/G-Micro.icns"
 ls -1sh "$OUT" | sed 's/^/  /'

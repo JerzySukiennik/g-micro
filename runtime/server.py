@@ -1,5 +1,5 @@
 """
-MicroG inference backend — a WebSocket server wrapping the model.
+G-Micro inference backend — a WebSocket server wrapping the model.
 
 Electron's main process spawns this on launch and kills it on quit. It is
 also a complete, standalone WebSocket server: run it directly and point any
@@ -242,7 +242,7 @@ ws_state = {}  # single-process, single-model: shared across reconnects
 
 
 async def main():
-    print(f"MicroG backend listening on ws://localhost:{PORT}", flush=True)
+    print(f"G-Micro backend listening on ws://localhost:{PORT}", flush=True)
     async with websockets.serve(handler, "localhost", PORT):
         await asyncio.Future()  # run forever
 

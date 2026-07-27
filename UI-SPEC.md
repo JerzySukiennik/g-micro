@@ -1,4 +1,4 @@
-# MicroG — specyfikacja interfejsu
+# G-Micro — specyfikacja interfejsu
 
 Ustalone w wywiadzie `/pytania` 2026-07-20 (41 pytań, skille `frontend-design` + `apple-design`).
 Status: **zatwierdzone, czeka na komendę „Buduj UI"**. Nic z tego nie jest domysłem — każda pozycja to decyzja Jurka albo jego wyraźna delegacja.
@@ -7,7 +7,7 @@ Status: **zatwierdzone, czeka na komendę „Buduj UI"**. Nic z tego nie jest do
 
 ## Tożsamość
 
-**MicroG.** Nazwa małym monospace'em w rogu, obok liczby parametrów i tok/s. Apka nie krzyczy nazwą — pokazuje stan.
+**G-Micro.** Nazwa małym monospace'em w rogu, obok liczby parametrów i tok/s. Apka nie krzyczy nazwą — pokazuje stan.
 
 Język interfejsu: **angielski** (spójne z konwencją kod/commity EN, terminy ML brzmią naturalnie, krótsze etykiety lepiej leżą w minimalistycznym układzie).
 
@@ -28,7 +28,7 @@ Język interfejsu: **angielski** (spójne z konwencją kod/commity EN, terminy M
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ ● ● ●                                    MicroG  109.5M │
+│ ● ● ●                                    G-Micro  109.5M │
 ├──────────────────────┬──────────────────────────────┤
 │                      │  [ Neurons ] [ Probabilities ]│
 │   rozmowa  (40%)     │                              │

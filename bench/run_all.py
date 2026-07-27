@@ -1,5 +1,5 @@
 """
-MicroG benchmark suite — run everything against a checkpoint, produce a
+G-Micro benchmark suite — run everything against a checkpoint, produce a
 markdown report and a JSON file with the raw numbers.
 
 Usage:
@@ -82,7 +82,7 @@ def main():
 
 def render_markdown(r):
     lines = [
-        f"# MicroG benchmark — step {r['step']}",
+        f"# G-Micro benchmark — step {r['step']}",
         f"_{r['timestamp']}_",
         "",
         "| Metric | Value |",
