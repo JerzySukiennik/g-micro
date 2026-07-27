@@ -33,7 +33,12 @@ from common import load_model, load_tokenizer, score_sentence  # noqa: E402
 
 U, A, EOT, CTX = "<|user|>", "<|assistant|>", "<|endoftext|>", "<|context|>"
 REPO = Path(__file__).resolve().parents[1]
-MAX_NEW = 48
+# Generation stops at <|endoftext|>, so this budget only costs time on answers
+# that fail to terminate — which is exactly what stops_cleanly measures. It was
+# 48, which turned out to measure the budget rather than the model: "Czym jest
+# Warszawa?" writes a complete 43-word answer and emits EOT just past the old
+# cutoff, and was being scored as a failure to stop.
+MAX_NEW = 128
 
 # --------------------------------------------------------------- test sets --
 

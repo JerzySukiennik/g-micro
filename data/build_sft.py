@@ -68,7 +68,14 @@ IDENTITY_EXAMPLES = [
     ("Czy jesteś Gemini?", "Nie, nie jestem Gemini. Nazywam się MicroG i jestem osobnym, dużo mniejszym modelem."),
     ("Czy jesteś człowiekiem?", "Nie, jestem modelem językowym o nazwie MicroG."),
 ]
-IDENTITY_REPEATS = 60
+# Was 60, when there were 16 written examples and no accent-free variants.
+# With 37 distinct forms that became 2,220 rows — enough weight that identity
+# started bleeding into questions that merely *look* like identity questions:
+# "Kto napisał Pana Tadeusza?" answered "jestem modelem językowym o nazwie
+# MicroG", colliding with the trained "Kto cię stworzył?". Identity scores
+# 100% both spellings with p≈0.95 on the first token, so there is room to give
+# some of that weight back and let ordinary questions win again.
+IDENTITY_REPEATS = 40
 
 
 def strip_diacritics(text: str) -> str:
@@ -134,7 +141,23 @@ CONTEXT_QA_REPO = "clarin-pl/poquad"
 # dev is deliberately left untouched so it stays a genuine holdout for
 # measuring grounding on data the model has never seen.
 CONTEXT_QA_FILE = "poquad-train.json"  # 46,187 answerable QAs
-CONTEXT_QA_SAMPLE = 30000
+CONTEXT_QA_SAMPLE = 34000
+
+# Round A took grounding from 20% to 40%, and the split in what it fixed is
+# sharp: names started copying correctly ("Anna Reut", "w Gdyni" — both wrong
+# before, both right after) while numbers did not (context says 1417, model
+# says 1418; context says cztery wieże, model says dwa; context says 42 km,
+# model says trzy). The copying machinery clearly works — it is the model's
+# own prior over plausible years and counts beating the text in front of it,
+# which is a training-signal balance, not a missing capability.
+#
+# Only 17.3% of PoQuAD answers contain a digit, so numeric copying got a
+# fraction of an already-small share. Oversampling numeric answers to ~45%
+# targets exactly the failure the benchmark found. They are drawn with
+# repetition (~1.9x over 7,981 distinct rows), which is safe here because each
+# one carries a different number in a different context — the model has to
+# learn "read the digits from the text", not memorise any single fact.
+CONTEXT_QA_NUMERIC_FRAC = 0.45
 
 
 def load_context_qa_examples(sample_size=CONTEXT_QA_SAMPLE, seed=0):
@@ -164,9 +187,30 @@ def load_context_qa_examples(sample_size=CONTEXT_QA_SAMPLE, seed=0):
                     continue
                 triples.append((context, qa["question"], answer))
 
+    numeric = [t for t in triples if re.search(r"\d", t[2])]
+    other = [t for t in triples if not re.search(r"\d", t[2])]
+
     rng = np.random.default_rng(seed)
-    idx = rng.permutation(len(triples))[:sample_size]
-    return [triples[i] for i in idx]
+    n_numeric = int(sample_size * CONTEXT_QA_NUMERIC_FRAC)
+    n_other = sample_size - n_numeric
+
+    def draw(pool, n):
+        if not pool:
+            return []
+        # Whole pool first, then top up with repeats — sampling with
+        # replacement throughout would leave some rows unused while repeating
+        # others three times over.
+        out = []
+        while len(out) < n:
+            take = min(n - len(out), len(pool))
+            idx = rng.permutation(len(pool))[:take]
+            out.extend(pool[i] for i in idx)
+        return out
+
+    picked = draw(numeric, n_numeric) + draw(other, n_other)
+    print(f"context-QA pool: {len(numeric):,} numeric / {len(other):,} other "
+          f"-> drawing {n_numeric:,} / {n_other:,}", flush=True)
+    return [picked[i] for i in rng.permutation(len(picked))]
 
 
 def format_context_example(context, question, answer, max_context_chars=800):
