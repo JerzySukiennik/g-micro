@@ -10,12 +10,24 @@ import { Wake } from './wake.js';
 import { NeuronField } from './neurons.js';
 import { ProbabilitiesView } from './probabilities.js';
 import { ChatView } from './chat.js';
-import { Settings } from './settings.js';
 import { History } from './history.js';
 import { SpringLoop, SPRING } from './spring.js';
 
 const WS_URL = 'ws://localhost:8899';
 const PINNED_CHART_LEN = 80;
+
+// Sampling is fixed rather than exposed. Sliders for temperature and top_k
+// ask the reader to understand sampling before they can hold a conversation,
+// and every value they could pick is worse than a measured one: identity
+// answers came back correct 12/12 at 0.8, 0.4 and greedy alike, so the choice
+// only ever changed how varied the wording was.
+//
+// RAG is off. Once its retrieval was fixed it does find the right article,
+// but grounded answers come out as bare extracted spans — "Co to jest
+// fotosynteza?" answered "koenzym" — because the grounding data it learned
+// from (PoQuAD) has span-shaped answers. Fluent and sometimes wrong reads
+// better in a chat than terse and sometimes wrong.
+const GENERATION = { temperature: 0.7, top_k: 40, rag: false };
 
 // ---------------------------------------------------------------- elements --
 const $ = (s) => document.querySelector(s);
@@ -115,11 +127,17 @@ window.__debug = { probs, neurons };
 // ------------------------------------------------------------------- chat --
 const chat = new ChatView($('#messages'));
 
-// --------------------------------------------------------------- settings --
-const settings = new Settings($('#settings-popover'));
-$('#settings-trigger').addEventListener('click', (e) => {
-  settings.toggle(e.currentTarget.getBoundingClientRect());
-});
+// ------------------------------------------------------- instrument panel --
+// Hidden by default; ⌥⌘D brings it back. It is not a setting, so it does not
+// belong in a settings panel that no longer exists — it is the view this app
+// was originally built around, kept for when the question is "what is the
+// model doing" rather than "answer me".
+let panelVisible = false;
+function toggleInstrumentPanel() {
+  panelVisible = !panelVisible;
+  document.body.classList.toggle('show-panel', panelVisible);
+  if (panelVisible) requestAnimationFrame(() => { neurons.resize?.(); renderTabIndicator(); });
+}
 
 // ----------------------------------------------------------------- history --
 const history = new History({
@@ -130,6 +148,17 @@ const history = new History({
 });
 $('#history-trigger').addEventListener('click', () => history.toggle());
 $('#sidebar-new').addEventListener('click', startNewConversation);
+$('#new-trigger').addEventListener('click', startNewConversation);
+
+// Delegated, because chat.clear() re-inserts the welcome markup and any
+// listener bound directly to those buttons would die with the old nodes.
+$('#messages').addEventListener('click', (e) => {
+  const chip = e.target.closest('.suggestion');
+  if (!chip || !modelReady || generating) return;
+  inputField.value = chip.dataset.text;
+  autoGrow();
+  sendMessage();
+});
 
 async function loadConversation(id) {
   const conv = await window.microg.history.load(id);
@@ -229,26 +258,20 @@ function sendMessage() {
   generating = true;
   tokenTimes = [];
 
-  ws.send(JSON.stringify({
-    type: 'chat', text,
-    temperature: settings.values.temperature,
-    top_k: settings.values.top_k,
-    rag: settings.values.rag,
-  }));
+  ws.send(JSON.stringify({ type: 'chat', text, ...GENERATION }));
 }
 
 // -------------------------------------------------------------- keyboard --
 document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewConversation(); }
+  if (mod && e.altKey && e.key.toLowerCase() === 'd') { e.preventDefault(); toggleInstrumentPanel(); }
+  else if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewConversation(); }
   else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); history.toggle(); }
-  else if (mod && e.key === ',') { e.preventDefault(); settings.toggle($('#settings-trigger').getBoundingClientRect()); }
   else if (e.key === 'Escape') {
     if (generating) { ws?.send(JSON.stringify({ type: 'stop' })); }
-    else if (settings.isOpen) settings.close();
     else if (history.open) history.close();
-  } else if (e.key === 'Tab' && e.target !== inputField
-             && !e.target.closest('#settings-popover, #sidebar')) {
+  } else if (e.key === 'Tab' && panelVisible && e.target !== inputField
+             && !e.target.closest('#sidebar')) {
     // Excluding the input field matters: an IME/dead-key sequence composing
     // an accented character (this app's whole reason for existing is Polish
     // text) can synthesize a stray Tab keydown mid-composition — it must
@@ -260,8 +283,7 @@ document.addEventListener('keydown', (e) => {
 
 window.microg?.onShortcut?.('new', startNewConversation);
 window.microg?.onShortcut?.('history', () => history.toggle());
-window.microg?.onShortcut?.('settings', () =>
-  settings.toggle($('#settings-trigger').getBoundingClientRect()));
+window.microg?.onShortcut?.('panel', toggleInstrumentPanel);
 
 // --------------------------------------------------------------- WS wiring --
 function connect() {
@@ -283,7 +305,7 @@ function connect() {
         modelReady = true;
         wake.finish();
         brandParams.textContent = `${(msg.params / 1e6).toFixed(1)}M`;
-        inputField.placeholder = 'Message MicroG…';
+        inputField.placeholder = 'Napisz wiadomość…';
         break;
 
       case 'context':

@@ -10,15 +10,21 @@ export class ChatView {
     this.container = container;
     this.currentAssistantEl = null;
     this.currentTextNode = null;
+    // The welcome block ships in index.html rather than being built here, so
+    // the copy and the suggestions live with the rest of the markup. Keeping
+    // a copy of it means an emptied conversation can show it again instead of
+    // leaving a blank page. Suggestion clicks are handled by delegation in
+    // app.js precisely because this markup gets re-inserted.
+    this.welcomeHTML = container.innerHTML;
   }
 
   clear() {
-    this.container.innerHTML = '<div id="empty-cursor"></div>';
+    this.container.innerHTML = this.welcomeHTML;
     this.currentAssistantEl = null;
   }
 
   addUserMessage(text) {
-    document.getElementById('empty-cursor')?.remove();
+    document.getElementById('welcome')?.remove();
     const el = document.createElement('div');
     el.className = 'msg-user';
     el.textContent = text;

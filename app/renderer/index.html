@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
 <head>
 <meta charset="utf-8">
 <title>MicroG</title>
@@ -8,24 +8,22 @@
 <body>
 
 <div id="titlebar">
-  <button id="history-trigger" class="chrome-btn" title="Conversations (⌘K)" aria-label="Conversations">
+  <button id="history-trigger" class="chrome-btn" title="Rozmowy (⌘K)" aria-label="Rozmowy">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
   </button>
-  <div class="brand mono">
+  <div class="brand">
     <span>MicroG</span>
-    <b id="brand-params">—</b>
-    <span id="brand-speed"></span>
   </div>
-  <button id="settings-trigger" class="chrome-btn" title="Settings (⌘,)" aria-label="Settings">
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.4 3.6l-1.4 1.4M5 9.6l-1.4 1.4M12.4 12.4l-1.4-1.4M5 6.4L3.6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+  <button id="new-trigger" class="chrome-btn" title="Nowa rozmowa (⌘N)" aria-label="Nowa rozmowa">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
   </button>
 </div>
 
 <div id="sidebar-scrim"></div>
 <aside id="sidebar" aria-hidden="true">
   <div id="sidebar-header">
-    <span class="title">Conversations</span>
-    <button id="sidebar-new" title="New conversation (⌘N)" aria-label="New conversation">
+    <span class="title">Rozmowy</span>
+    <button id="sidebar-new" title="Nowa rozmowa (⌘N)" aria-label="Nowa rozmowa">
       <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     </button>
   </div>
@@ -35,16 +33,36 @@
 <main id="shell">
   <section id="conversation-pane">
     <div id="messages">
-      <div id="empty-cursor"></div>
+      <!-- Shown only while the conversation is empty. A blank screen with a
+           blinking cursor asks the reader to already know what to type; the
+           suggestions answer that question by example, and every one of them
+           is something this model is measurably good at. -->
+      <div id="welcome">
+        <h1>Cześć, jestem MicroG.</h1>
+        <p>Mały model językowy, który mówi po polsku. Zapytaj mnie o coś.</p>
+        <div id="suggestions">
+          <button class="suggestion" data-text="Kim jesteś?">Kim jesteś?</button>
+          <button class="suggestion" data-text="Wymień trzy owoce.">Wymień trzy owoce.</button>
+          <button class="suggestion" data-text="Czym jest Warszawa?">Czym jest Warszawa?</button>
+          <button class="suggestion" data-text="Opowiedz coś o psach.">Opowiedz coś o psach.</button>
+        </div>
+      </div>
     </div>
-    <div id="input-bar">
-      <textarea id="input-field" rows="1" placeholder="" spellcheck="false"></textarea>
-      <button id="send-btn" class="disabled" aria-label="Send">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+    <div id="input-composer">
+      <div id="input-bar">
+        <textarea id="input-field" rows="1" placeholder="Napisz wiadomość…" spellcheck="false"></textarea>
+        <button id="send-btn" class="disabled" aria-label="Wyślij">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div id="composer-hint">MicroG jest bardzo małym modelem i często się myli.</div>
     </div>
   </section>
 
+  <!-- The instrument panel this app was originally built around. Hidden by
+       default so the everyday experience is just a chat; ⌥⌘D brings it back.
+       Kept rather than deleted — it is the part that shows what the model is
+       actually doing, which was half the point of building MicroG. -->
   <section id="panel-pane">
     <nav id="tabs" role="tablist">
       <button class="tab" data-tab="neurons" role="tab" aria-selected="true">
@@ -53,6 +71,12 @@
       <button class="tab" data-tab="probabilities" role="tab" aria-selected="false">
         Probabilities<span class="indicator" style="opacity:0"></span>
       </button>
+      <!-- Parameter count and throughput live here rather than in the title
+           bar: real numbers, but jargon, and the chat view is meant to read
+           like a chat rather than a dashboard. -->
+      <div class="panel-readout mono">
+        <b id="brand-params">—</b><span id="brand-speed"></span>
+      </div>
     </nav>
     <div class="panel-body">
       <div id="neurons-view" class="panel-view active">
@@ -79,27 +103,9 @@
   </section>
 </main>
 
-<div id="settings-popover">
-  <div class="setting-row">
-    <div class="label"><span>Temperature</span><span class="val mono" id="temp-val">0.80</span></div>
-    <input type="range" id="temp-range" min="0.1" max="1.5" step="0.05" value="0.8">
-  </div>
-  <div class="setting-row">
-    <div class="label"><span>Top-k</span><span class="val mono" id="topk-val">50</span></div>
-    <input type="range" id="topk-range" min="1" max="200" step="1" value="50">
-  </div>
-  <div class="setting-row toggle-row">
-    <div>
-      <div class="label" style="margin-bottom:2px"><span>Use notes (RAG)</span></div>
-      <div class="setting-hint" style="max-width:170px">Retrieves from your vault before answering. Sources aren't shown — verify anything factual.</div>
-    </div>
-    <div class="toggle" id="rag-toggle"></div>
-  </div>
-</div>
-
 <div id="wake-overlay">
   <canvas id="wake-canvas"></canvas>
-  <div id="wake-label" class="mono">loading weights</div>
+  <div id="wake-label">Budzę model…</div>
 </div>
 
 <script type="module" src="app.js"></script>

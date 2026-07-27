@@ -122,8 +122,12 @@ function buildMenu() {
           click: () => win?.webContents.send('shortcut:new') },
         { label: 'Toggle History', accelerator: 'CmdOrCtrl+K',
           click: () => win?.webContents.send('shortcut:history') },
-        { label: 'Settings…', accelerator: 'CmdOrCtrl+,',
-          click: () => win?.webContents.send('shortcut:settings') },
+        // No settings item: sampling is fixed at measured defaults and there
+        // is nothing left for a user to configure. This toggles the neurons
+        // and probabilities panel instead — hidden by default so the app
+        // reads as a chat, still one shortcut away.
+        { label: 'Pokaż podgląd modelu', accelerator: 'CmdOrCtrl+Alt+D',
+          click: () => win?.webContents.send('shortcut:panel') },
       ],
     },
     {
