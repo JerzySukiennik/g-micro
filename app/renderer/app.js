@@ -165,7 +165,7 @@ $('#messages').addEventListener('click', (e) => {
 });
 
 async function loadConversation(id) {
-  const conv = await window.g-micro.history.load(id);
+  const conv = await window.gmicro.history.load(id);
   if (!conv) return;
   currentConvId = id;
   messages = conv.messages || [];
@@ -189,7 +189,7 @@ function startNewConversation() {
 async function persistConversation() {
   if (!messages.length) return;
   const title = messages[0]?.text?.slice(0, 60) || 'Untitled';
-  const id = await window.g-micro.history.save({
+  const id = await window.gmicro.history.save({
     id: currentConvId, title, updated: Date.now(), messages,
   });
   currentConvId = id;
@@ -285,9 +285,9 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-window.g-micro?.onShortcut?.('new', startNewConversation);
-window.g-micro?.onShortcut?.('history', () => history.toggle());
-window.g-micro?.onShortcut?.('panel', toggleInstrumentPanel);
+window.gmicro?.onShortcut?.('new', startNewConversation);
+window.gmicro?.onShortcut?.('history', () => history.toggle());
+window.gmicro?.onShortcut?.('panel', toggleInstrumentPanel);
 
 // --------------------------------------------------------------- WS wiring --
 function connect() {

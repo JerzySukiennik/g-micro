@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('g-micro', {
+contextBridge.exposeInMainWorld('gmicro', {
   history: {
     list: () => ipcRenderer.invoke('history:list'),
     load: (id) => ipcRenderer.invoke('history:load', id),
