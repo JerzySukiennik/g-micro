@@ -188,7 +188,16 @@ LIST_CASES = [
      {"pies", "psa", "kot", "koń", "kon", "krow", "świni", "swini", "owc", "kur",
       "lis", "wilk", "niedźwiedź", "niedzwiedz", "zając", "zajac", "sarn", "jeleń",
       "jelen", "słoń", "slon", "tygrys", "lew", "małp", "malp", "mysz", "ryb",
+      # Stems, not whole words: Polish drops the fill vowel when it inflects
+      # ("wróbel" but "wróbla"), so "wróbl" alone missed the nominative the
+      # model actually wrote. Same trap as the Toruń case.
       "jaguar", "bocian", "żyraf", "zyraf", "zebr", "krokodyl", "wielorib",
+      "wróbel", "wrobel", "jaskół", "jaskol", "kacz", "gęś", "ges ", "indyk",
+      "bażant", "bazant", "czapl", "łab", "lab", "kruk", "wron", "sroka",
+      "dzięcio", "dziecio", "kukułk", "kukulk", "sikork", "szpak", "słowik",
+      "slowik", "jeż", "jez ", "kret", "chomik", "śwink", "swink", "osioł",
+      "osiol", "muł", "wielbłąd", "wielblad", "lam", "alpak", "bizon", "żubr",
+      "zubr", "renifer", "antylop", "gazel", "surykatk", "leniwiec", "pingwin",
       "wieloryb", "delfin", "orzeł", "orzel", "sow", "wróbl", "wrobl", "gołąb",
       "golab", "jaszczur", "wąż", "waz", "żółw", "zolw", "królik", "krolik",
       "wiewiór", "wiewior", "borsuk", "dzik", "łoś", "los ", "ryś", "rys ",
