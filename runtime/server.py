@@ -50,6 +50,27 @@ FALLBACK_TOKENIZER_PATH = REPO / "data" / "tokenizer.json"
 TOP_K_NEURONS = 64          # per layer, per UI-SPEC.md "Dane z modelu"
 WAKE_STEP_DELAY = 0.05      # perceptual pacing between wake events — see load()
 
+# How many past exchanges to show the model.
+#
+# Measured 2026-07-28 with bench/multiturn_eval.py over 18 single-turn checks
+# and 5 follow-ups. Every SFT example was a single turn, so history is out of
+# distribution and the cost is real and monotonic:
+#
+#     history      ordinary questions      follow-ups
+#     0 turns              89%                 40%
+#     1 turn               89%   (no loss)     80%
+#     2 turns              83%   (-6 pts)
+#     4 turns              78%   (-11 pts)
+#
+# One exchange buys the entire follow-up gain for nothing. Four would pay
+# eleven points on *every* message for an ability already fully present at one.
+# Raise this only with a model trained on multi-turn data, and re-run the
+# benchmark when doing so.
+HISTORY_TURNS = 1
+
+# Leave room for the reply inside the model's 1024-token window.
+PROMPT_BUDGET = 640
+
 U, A, EOT, CTX = "<|user|>", "<|assistant|>", "<|endoftext|>", "<|context|>"
 
 
@@ -144,7 +165,39 @@ class Backend:
                 else "wavering" if entropy_norm < 0.66 else "guessing")
         return {"top": pairs, "entropy_norm": entropy_norm, "label": label}
 
-    async def chat(self, send, text, temperature, top_k, stop_event, rag=False):
+    def build_prompt(self, text, history, context_prefix=""):
+        """Lay out the conversation the way the model was trained to read it.
+
+        Each turn is the same <|user|>/<|assistant|> pair the SFT data used, so
+        the format is familiar even though the *sequence* of several turns is
+        not: every training example was a single exchange. Feeding history is
+        therefore out of distribution, and how far it can be pushed before
+        answers degrade is a measured question, not an assumed one — see
+        bench/multiturn_eval.py and HISTORY_TURNS below.
+
+        History is trimmed from the oldest end so the newest exchange always
+        survives, and the whole prompt is capped well under the model's 1024
+        token window to leave room for the reply.
+        """
+        parts = []
+        for turn in history:
+            q, a = turn.get("user", ""), turn.get("assistant", "")
+            if q and a:
+                parts.append(f"{U}\n{q}\n{A}\n{a}{EOT}\n")
+        parts.append(f"{U}\n{text}\n{A}\n")
+
+        # Drop whole exchanges, oldest first, until the prompt fits. Cutting
+        # mid-turn would leave a question with no answer, which is exactly the
+        # pattern that teaches a model to invent questions.
+        while len(parts) > 1:
+            candidate = context_prefix + "".join(parts)
+            if len(self.tok.encode(candidate).ids) <= PROMPT_BUDGET:
+                break
+            parts.pop(0)
+        return context_prefix + "".join(parts)
+
+    async def chat(self, send, text, temperature, top_k, stop_event, rag=False,
+                   history=None):
         context_prefix = ""
         if rag:
             hit = retrieve(text)
@@ -165,10 +218,15 @@ class Backend:
                 # "Argentyńskie" with nothing on screen to explain it.
                 await send({"type": "context", "source": hit.get("source", "?"),
                             "text": hit["text"][:400]})
-        prompt = f"{context_prefix}{U}\n{text}\n{A}\n"
+        history = (history or [])[-HISTORY_TURNS:]
+        prompt = self.build_prompt(text, history, context_prefix)
         ids = self.tok.encode(prompt).ids
         idx = torch.tensor([ids])
-        capture = Capture(enabled=True)
+        # The visualisation panel this fed was removed on 2026-07-28, so the
+        # per-token copies of attention and activations off to the CPU are now
+        # pure cost. Measurement could not resolve the saving on this hardware
+        # (the run-to-run spread swamped it), but dead work cannot be faster.
+        capture = Capture(enabled=False)
 
         for token_id, probs in self.model.generate(
                 idx, max_new_tokens=400, temperature=temperature,
@@ -226,7 +284,8 @@ async def handler(ws):
                     send, msg.get("text", ""),
                     float(msg.get("temperature", 0.8)),
                     int(msg.get("top_k", 50)),
-                    stop_event, rag=bool(msg.get("rag", False))))
+                    stop_event, rag=bool(msg.get("rag", False)),
+                    history=msg.get("history") or []))
                 pending.add(task)
                 task.add_done_callback(pending.discard)
             elif msg.get("type") == "stop":

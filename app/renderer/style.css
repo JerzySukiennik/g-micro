@@ -443,3 +443,140 @@ body.show-panel #input-composer { padding: 0 16px 16px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- formatted replies -------------------------------------------------- */
+/* Applied once a reply is finished; while streaming the raw tokens carry the
+   flash animation and no layout at all. */
+.msg-body > p { margin: 0 0 12px; }
+.msg-body > p:last-child { margin-bottom: 0; }
+.msg-body ol {
+  margin: 4px 0 12px; padding-left: 26px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.msg-body ol:last-child { margin-bottom: 0; }
+.msg-body li { padding-left: 2px; }
+.msg-body li::marker { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.msg-body code {
+  font-family: var(--font-mono); font-size: 0.88em;
+  background: var(--glass); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px;
+}
+.msg-body strong { font-weight: 600; color: var(--ink-full); }
+.msg-body em { font-style: italic; }
+
+/* ---- copy button -------------------------------------------------------- */
+/* Hidden until the answer is hovered: present when wanted, absent from the
+   reading experience the rest of the time. */
+.msg-assistant { position: relative; }
+.msg-copy {
+  position: absolute; top: -2px; right: -6px;
+  width: 30px; height: 30px; border-radius: 8px;
+  display: grid; place-items: center;
+  color: var(--ink-dim); opacity: 0;
+  transition: opacity 160ms ease-out, background 160ms ease-out, color 160ms ease-out;
+}
+.msg-copy svg { width: 16px; height: 16px; }
+.msg-assistant:hover .msg-copy { opacity: 1; }
+.msg-copy:hover { background: var(--glass); color: var(--ink); }
+.msg-copy.copied { opacity: 1; color: var(--ink-full); }
+@media (prefers-reduced-motion: reduce) { .msg-copy { transition: none; } }
+
+/* ---- composer: send becomes stop ---------------------------------------- */
+#send-btn.stopping { background: var(--ink-full); color: var(--black); }
+#send-btn.stopping:hover { background: var(--ink); }
+#send-btn.stopping svg { width: 15px; height: 15px; }
+
+/* ---- onboarding --------------------------------------------------------- */
+#onboarding {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  opacity: 0; transition: opacity 240ms ease-out;
+}
+#onboarding.visible { opacity: 1; }
+.ob-card {
+  width: min(540px, calc(100vw - 80px));
+  padding: 40px 42px 30px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-l);
+  transform: translateY(10px) scale(0.985);
+  transition: transform 320ms cubic-bezier(.2,.8,.2,1);
+}
+#onboarding.visible .ob-card { transform: none; }
+.ob-tag {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-dim); margin-bottom: 16px;
+}
+.ob-card h2 {
+  margin: 0 0 14px; font-size: 27px; font-weight: 500;
+  letter-spacing: -0.015em; color: var(--ink);
+}
+.ob-card p { margin: 0; font-size: 15px; line-height: 1.62; color: var(--ink-mid); }
+#ob-name {
+  margin-top: 22px; width: 100%; box-sizing: border-box;
+  background: var(--glass); border: 1px solid var(--line);
+  border-radius: var(--radius-m); padding: 13px 16px;
+  font-family: var(--font-ui); font-size: 16px; color: var(--ink);
+}
+#ob-name::placeholder { color: var(--ink-dim); }
+#ob-name:focus { outline: none; border-color: var(--line-strong); }
+.ob-foot {
+  margin-top: 30px; display: flex; align-items: center;
+  justify-content: space-between; gap: 20px;
+}
+.ob-dots { display: flex; gap: 7px; }
+.ob-dots span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--line-strong); transition: background 220ms ease-out;
+}
+.ob-dots span.on { background: var(--ink); }
+.ob-actions { display: flex; align-items: center; gap: 8px; }
+.ob-skip {
+  font-size: 13.5px; color: var(--ink-dim); padding: 9px 12px; border-radius: var(--radius-s);
+}
+.ob-skip:hover { color: var(--ink-mid); }
+.ob-next {
+  font-size: 14.5px; color: var(--black); background: var(--ink-full);
+  padding: 10px 20px; border-radius: 999px; font-weight: 500;
+}
+.ob-next:hover { background: #fff; transform: translateY(-1px); }
+.ob-next:active { transform: translateY(0) scale(0.98); }
+@media (prefers-reduced-motion: reduce) {
+  #onboarding, .ob-card, .ob-next { transition: none; }
+}
+
+/* ---- history rows ------------------------------------------------------- */
+/* Controls stay hidden until the row is hovered: these lists are read far more
+   often than they are managed. */
+.conv-row {
+  display: flex; align-items: stretch; gap: 2px;
+  border-radius: var(--radius-s);
+}
+.conv-row:hover { background: var(--glass); }
+.conv-row.active .conv-item { color: var(--ink); }
+.conv-row .conv-item { flex: 1; min-width: 0; background: none; }
+.conv-row:hover .conv-item { background: none; }
+.conv-act {
+  width: 28px; flex-shrink: 0; border-radius: var(--radius-s);
+  display: grid; place-items: center;
+  color: var(--ink-dim); opacity: 0;
+  transition: opacity 150ms ease-out, color 150ms ease-out, background 150ms ease-out;
+}
+.conv-act svg { width: 15px; height: 15px; }
+.conv-row:hover .conv-act { opacity: 1; }
+.conv-act:hover { background: var(--glass-strong); color: var(--ink); }
+.conv-act.danger:hover { color: var(--error); }
+/* Armed state: the click after this one deletes. */
+.conv-act.danger.confirm {
+  opacity: 1; color: var(--error); background: var(--error-glow);
+}
+.conv-rename {
+  flex: 1; min-width: 0;
+  background: var(--glass-strong); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s); padding: 9px 11px;
+  font-family: var(--font-ui); font-size: 13.5px; color: var(--ink);
+}
+.conv-rename:focus { outline: none; border-color: var(--ink-dim); }
+@media (prefers-reduced-motion: reduce) { .conv-act { transition: none; } }

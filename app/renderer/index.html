@@ -59,48 +59,6 @@
     </div>
   </section>
 
-  <!-- The instrument panel this app was originally built around. Hidden by
-       default so the everyday experience is just a chat; ⌥⌘D brings it back.
-       Kept rather than deleted — it is the part that shows what the model is
-       actually doing, which was half the point of building G-Micro. -->
-  <section id="panel-pane">
-    <nav id="tabs" role="tablist">
-      <button class="tab" data-tab="neurons" role="tab" aria-selected="true">
-        Neurons<span class="indicator"></span>
-      </button>
-      <button class="tab" data-tab="probabilities" role="tab" aria-selected="false">
-        Probabilities<span class="indicator" style="opacity:0"></span>
-      </button>
-      <!-- Parameter count and throughput live here rather than in the title
-           bar: real numbers, but jargon, and the chat view is meant to read
-           like a chat rather than a dashboard. -->
-      <div class="panel-readout mono">
-        <b id="brand-params">—</b><span id="brand-speed"></span>
-      </div>
-    </nav>
-    <div class="panel-body">
-      <div id="neurons-view" class="panel-view active">
-        <div id="neurons-wrap">
-          <canvas id="neurons-canvas"></canvas>
-          <div id="neuron-tooltip"></div>
-          <div id="pinned-chart">
-            <div class="label"><span id="pinned-label">—</span><span id="pinned-unpin" style="cursor:pointer">unpin ✕</span></div>
-            <canvas id="pinned-canvas"></canvas>
-          </div>
-        </div>
-      </div>
-      <div id="probabilities-view" class="panel-view">
-        <div id="prob-bars"></div>
-        <div id="confidence">
-          <div class="row">
-            <span class="label">Confidence</span>
-            <span class="state mono" id="confidence-state">—</span>
-          </div>
-          <div class="track"><div class="fill" id="confidence-fill" style="width:0%"></div></div>
-        </div>
-      </div>
-    </div>
-  </section>
 </main>
 
 <div id="wake-overlay">

@@ -5,6 +5,8 @@
  * text to the pulse in the neuron panel next to it.
  */
 
+import {renderMarkdown} from './format.js';
+
 export class ChatView {
   constructor(container) {
     this.container = container;
@@ -76,9 +78,59 @@ export class ChatView {
     this._scrollToBottom();
   }
 
+  /**
+   * Finish a reply: swap the streamed spans for formatted output and attach a
+   * copy button.
+   *
+   * Formatting deliberately happens here rather than per token. The flash as
+   * each token lands is the app's one piece of genuine product behaviour, and
+   * re-parsing a half-finished sentence on every token would both fight that
+   * animation and render markup from syntax the model had not finished
+   * writing. Streaming stays raw; the finished text gets laid out once.
+   */
   endAssistantMessage() {
     this._cursor?.remove();
+    const el = this.currentAssistantEl;
     this.currentAssistantEl = null;
+    if (!el) return;
+
+    const source = el.querySelector('.msg-context-source');
+    const raw = [...el.querySelectorAll('.tok')].map((s) => s.textContent).join('');
+    if (!raw.trim()) return;
+
+    el.innerHTML = '';
+    if (source) el.appendChild(source);
+
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    body.innerHTML = renderMarkdown(raw);
+    el.appendChild(body);
+    el.appendChild(this._copyButton(raw));
+  }
+
+  /** Copy control, revealed on hover. Confirms in place rather than with a
+   *  toast — the feedback belongs where the click happened. */
+  _copyButton(text) {
+    const btn = document.createElement('button');
+    btn.className = 'msg-copy';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Kopiuj odpowiedź');
+    const idle = '<svg viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M5 15V5.5A1.5 1.5 0 0 1 6.5 4H15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+    const done = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 L10 17.5 L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    btn.innerHTML = idle;
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.innerHTML = done;
+        btn.classList.add('copied');
+        setTimeout(() => { btn.innerHTML = idle; btn.classList.remove('copied'); }, 1400);
+      } catch {
+        // Clipboard can be refused; saying nothing would look like the click
+        // was ignored.
+        btn.setAttribute('aria-label', 'Nie udało się skopiować');
+      }
+    });
+    return btn;
   }
 
   showError(message, onRetry) {

@@ -115,6 +115,17 @@ ipcMain.handle('history:save', (_e, conv) => {
   return id;
 });
 
+ipcMain.handle('history:rename', (_e, id, title) => {
+  const p = path.join(CONV_DIR, `${id}.json`);
+  if (!fs.existsSync(p)) return false;
+  const conv = JSON.parse(fs.readFileSync(p, 'utf8'));
+  // Titles are otherwise the first 60 characters of the opening message, which
+  // stops distinguishing anything once several conversations start alike.
+  conv.title = String(title || '').trim().slice(0, 80) || conv.title;
+  fs.writeFileSync(p, JSON.stringify(conv));
+  return true;
+});
+
 ipcMain.handle('history:delete', (_e, id) => {
   fs.rmSync(path.join(CONV_DIR, `${id}.json`), { force: true });
 });
@@ -137,12 +148,14 @@ function buildMenu() {
           click: () => win?.webContents.send('shortcut:new') },
         { label: 'Toggle History', accelerator: 'CmdOrCtrl+K',
           click: () => win?.webContents.send('shortcut:history') },
-        // No settings item: sampling is fixed at measured defaults and there
-        // is nothing left for a user to configure. This toggles the neurons
-        // and probabilities panel instead — hidden by default so the app
-        // reads as a chat, still one shortcut away.
-        { label: 'Pokaż podgląd modelu', accelerator: 'CmdOrCtrl+Alt+D',
-          click: () => win?.webContents.send('shortcut:panel') },
+        { type: 'separator' },
+        // The neurons/probabilities panel was removed on 2026-07-28. What is
+        // left here are the two things that genuinely change behaviour: the
+        // retrieval toggle, and a way back to the introduction.
+        { label: 'Używaj Wikipedii', type: 'checkbox', checked: false,
+          click: (item) => win?.webContents.send('shortcut:rag', item.checked) },
+        { label: 'Pokaż wprowadzenie',
+          click: () => win?.webContents.send('shortcut:onboarding') },
       ],
     },
     {
