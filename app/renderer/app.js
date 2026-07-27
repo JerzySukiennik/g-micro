@@ -51,7 +51,11 @@ let modelReady = false;
 let generating = false;
 let currentConvId = null;
 let messages = []; // [{role, text}]
-let reconnectedOnce = false;
+let reconnectAttempt = 0;
+// Distinguishes "never started" from "lost mid-session": only the first
+// case should keep the wake overlay's wording.
+let modelEverReady = false;
+const RECONNECT_LIMIT = 20;   // ~30s of backoff before admitting defeat
 let pinnedFlat = null;
 let pinnedHistory = [];
 // Arrival times of the last few tokens. Rate is measured across the whole
@@ -289,7 +293,7 @@ window.microg?.onShortcut?.('panel', toggleInstrumentPanel);
 function connect() {
   ws = new WebSocket(WS_URL);
 
-  ws.onopen = () => { reconnectedOnce = false; };
+  ws.onopen = () => { reconnectAttempt = 0; };
 
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -303,6 +307,7 @@ function connect() {
 
       case 'ready':
         modelReady = true;
+        modelEverReady = true;
         wake.finish();
         brandParams.textContent = `${(msg.params / 1e6).toFixed(1)}M`;
         inputField.placeholder = 'Napisz wiadomość…';
@@ -358,13 +363,27 @@ function connect() {
 
   ws.onclose = () => {
     modelReady = false;
-    if (!reconnectedOnce) {
-      // UI-SPEC.md: "Apka próbuje wstać sama raz w tle, zanim powie" —
-      // one silent retry before surfacing anything to the user.
-      reconnectedOnce = true;
-      setTimeout(connect, 800);
+    // UI-SPEC.md asks the app to get itself back up before saying anything.
+    // The original policy was a single retry after 800ms, which is a race the
+    // app loses on a cold start: Electron spawns the Python backend and then
+    // loads this page, but the backend has to import torch before it can
+    // listen — measured at 3.8s. Both attempts land before the socket exists,
+    // the wake overlay never receives 'ready', and the window sits on "Budzę
+    // model…" forever. Confirmed 2026-07-27, and it had been marginal all
+    // along rather than newly broken.
+    //
+    // Backing off up to RECONNECT_LIMIT covers a slow start without hiding a
+    // genuinely dead backend: after ~30s it still surfaces the error.
+    reconnectAttempt += 1;
+    if (reconnectAttempt <= RECONNECT_LIMIT) {
+      if (!modelEverReady) {
+        wakeLabel.textContent = reconnectAttempt < 4
+          ? 'Budzę model…' : 'Budzę model… (jeszcze chwila)';
+      }
+      setTimeout(connect, Math.min(300 * reconnectAttempt, 2000));
     } else {
-      chat.showError('Lost connection to the model.', () => { reconnectedOnce = false; connect(); });
+      chat.showError('Nie mogę połączyć się z modelem.',
+                     () => { reconnectAttempt = 0; connect(); });
     }
   };
 }

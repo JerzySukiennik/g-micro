@@ -68,6 +68,21 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  // Renderer failures are invisible from the terminal otherwise, which cost a
+  // debugging session: the backend logged "listening", no window appeared, and
+  // there was nothing anywhere saying why. Forwarding the renderer's console
+  // and its crash events into the main log makes `npm start` self-diagnosing.
+  win.webContents.on('console-message', (_e, level, message, line, source) => {
+    if (level >= 2) console.log(`[renderer] ${message}  (${source}:${line})`);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.log(`[renderer] did-fail-load ${code} ${desc} ${url}`);
+  });
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.log(`[renderer] process gone: ${JSON.stringify(details)}`);
+  });
+  win.on('unresponsive', () => console.log('[renderer] unresponsive'));
+
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.on('closed', () => { win = null; });
