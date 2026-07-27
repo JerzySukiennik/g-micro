@@ -33,8 +33,15 @@ CANDIDATES = [
     ("MiniG 513M",             24, 20, 1280),
 ]
 BLOCK = 1024
-STEPS = 6          # a couple to warm up, the rest measured
-WARMUP = 2
+STEPS = 3          # optimiser steps timed (each is ACCUM micro-batches)
+WARMUP = 1
+# Real training accumulates gradients to a ~65k-token step (train/train.py:
+# batch 8 x grad_accum 8 x block 1024) so the optimiser runs once per eight
+# micro-batches. A first version of this probe stepped the optimiser after
+# every micro-batch and came out roughly 2x pessimistic — it predicted 21h for
+# MicroG's 2B tokens where the real run took about 10. Matching the real step
+# size is the difference between a usable estimate and a misleading one.
+TOKENS_PER_STEP = 65536
 
 
 def ffn_hidden(n_embd):
@@ -62,11 +69,13 @@ def try_config(label, n_layer, n_head, n_embd, micro_batch):
     x = torch.randint(0, cfg.vocab_size, (micro_batch, BLOCK), device=device)
     y = torch.randint(0, cfg.vocab_size, (micro_batch, BLOCK), device=device)
 
+    accum = max(1, TOKENS_PER_STEP // (micro_batch * BLOCK))
     t0 = None
     for step in range(STEPS):
-        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=device == "cuda"):
-            _, loss = model(x, targets=y, return_logits=False)
-        scaler.scale(loss).backward()
+        for _ in range(accum):
+            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=device == "cuda"):
+                _, loss = model(x, targets=y, return_logits=False)
+            scaler.scale(loss / accum).backward()
         scaler.step(opt)
         scaler.update()
         opt.zero_grad(set_to_none=True)
@@ -77,12 +86,12 @@ def try_config(label, n_layer, n_head, n_embd, micro_batch):
 
     elapsed = time.time() - t0
     measured_steps = STEPS - WARMUP
-    tok_per_s = micro_batch * BLOCK * measured_steps / elapsed
+    tok_per_s = micro_batch * BLOCK * accum * measured_steps / elapsed
     peak_gb = torch.cuda.max_memory_allocated() / 1e9
 
     del model, opt, x, y
     torch.cuda.empty_cache()
-    return n_params, tok_per_s, peak_gb
+    return n_params, tok_per_s, peak_gb, accum
 
 
 def main():
@@ -100,8 +109,8 @@ def main():
         # 513M trains at micro-batch 2 is a usable answer, "OOM" is not.
         for micro_batch in (8, 4, 2, 1):
             try:
-                n, tps, peak = try_config(label, L, H, E, micro_batch)
-                print(f"{label:<26} {n/1e6:>6.0f}M  micro_batch={micro_batch}  "
+                n, tps, peak, accum = try_config(label, L, H, E, micro_batch)
+                print(f"{label:<26} {n/1e6:>6.0f}M  micro_batch={micro_batch}x{accum}  "
                       f"{tps:>8,.0f} tok/s  peak {peak:>5.1f} GB")
                 results.append((label, n, tps, micro_batch, peak))
                 break
