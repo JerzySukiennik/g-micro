@@ -15,26 +15,34 @@ Protocol (JSON over one text WS message per line):
 
   client -> server
     {"type": "chat", "text": str, "temperature": float, "top_k": int,
-     "rag": bool}                                       # optional, default False
+     "rag": bool,                                       # optional, default False
+     "model": "g-micro" | "g-images",                   # optional, default g-micro
+     "image": "data:image/png;base64,..."}              # required by g-images
     {"type": "stop"}
 
   server -> client
     {"type": "wake", "layer": int, "of": int}        # -1 = embeddings done
-    {"type": "ready", "step": int|str, "params": int}
+    {"type": "ready", "step": int|str, "params": int,
+     "models": [{"id": str, "name": str, "available": bool}, ...]}
     {"type": "step", "token": str, "done": bool,
      "neurons": [[[idx,val], ...] x n_layer],          # top-64 per layer
      "probs": {"top": [[token_str, prob, token_id], ...],
                "entropy_norm": float, "label": str}}
+    {"type": "image_progress", "p": float}            # g-images, real pass count
+    {"type": "image_result", "image": str, "label": str}
     {"type": "error", "message": str}
 """
 
 import asyncio
+import base64
+import io
 import json
 import math
 import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
 import websockets
 from tokenizers import Tokenizer
@@ -43,6 +51,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 from model.gpt import GPT, GPTConfig, Capture  # noqa: E402
 from runtime.rag import retrieve  # noqa: E402
+from runtime.images import RES, ImageModel  # noqa: E402
 
 PORT = 8899
 TOKENIZER_PATH = REPO / "data" / "tokenizer-v2.json"
@@ -93,6 +102,128 @@ def find_checkpoint() -> Path:
         "no checkpoint found — looked in: " + ", ".join(str(c) for c in candidates))
 
 
+def decode_data_url(data_url: str) -> np.ndarray:
+    """data: URL -> square uint8 RGB array at the resolution G-Images expects.
+
+    Cropped to a centre square before resizing rather than squashed: a
+    stretched face is a worse answer than a cropped one, and every training
+    pair the model ever saw was square.
+    """
+    from PIL import Image, ImageOps
+
+    payload = data_url.split(",", 1)[-1]
+    img = Image.open(io.BytesIO(base64.b64decode(payload)))
+    # Phone photos carry their rotation in EXIF; without this a portrait shot
+    # comes back lying on its side.
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    side = min(img.size)
+    left, top = (img.width - side) // 2, (img.height - side) // 2
+    img = img.crop((left, top, left + side, top + side)).resize((RES, RES), Image.LANCZOS)
+    return np.asarray(img, dtype=np.uint8)
+
+
+def encode_data_url(arr: np.ndarray, scale: int = 3) -> str:
+    from PIL import Image
+
+    img = Image.fromarray(arr)
+    # The model works at 128px. Upscaling with NEAREST keeps the result honest —
+    # a smooth interpolation would suggest detail the model never produced.
+    img = img.resize((RES * scale, RES * scale), Image.NEAREST)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+class ImageBackend:
+    """G-Images as a second model behind the same socket.
+
+    Runs on a worker thread: one edit is ~36 s of solid CPU, and doing it on
+    the event loop would freeze the socket — including the stop button, which
+    is the one thing a person definitely wants during a 36-second wait.
+    """
+
+    def __init__(self):
+        self.model = ImageModel()
+
+    @property
+    def available(self):
+        return self.model.available()
+
+    async def run(self, send, text, image_url, stop_event):
+        if not image_url:
+            await self._say(send, "Dodaj zdjęcie — bez niego nie mam czego zmienić. "
+                                  "Kliknij spinacz obok pola tekstowego.")
+            return
+
+        loop = asyncio.get_running_loop()
+        try:
+            info = await loop.run_in_executor(None, self.model.load)
+        except Exception as e:
+            await self._say(send, f"Nie udało mi się wczytać G-Images: {e}")
+            return
+
+        edit_type = self.model.match(text)
+        if edit_type is None:
+            labels = ", ".join(self.model.known_labels())
+            await self._say(
+                send,
+                "Nie rozumiem tej zmiany. G-Images nie czyta zdań — zna skończoną "
+                f"listę {len(self.model.known_labels())} przeróbek i to wszystko, "
+                f"czego się nauczył:\n\n{labels}\n\n"
+                "Napisz coś z tej listy, np. „zrób to czarno-białe”.")
+            return
+
+        from runtime.images import LABELS
+        label = LABELS.get(edit_type, edit_type)
+        await self._say(send, f"Robię: {label}. To potrwa jakieś pół minuty — "
+                              f"model liczy na procesorze.", done=False)
+        await send({"type": "image_progress", "p": 0.0})
+
+        arr = decode_data_url(image_url)
+        last = [0.0]
+
+        def progress(p):
+            if stop_event.is_set():
+                raise _Stopped()
+            # One message per percent is plenty; per forward pass would be 120
+            # sends for a bar that only has so many pixels.
+            if p - last[0] >= 0.01 or p >= 1.0:
+                last[0] = p
+                asyncio.run_coroutine_threadsafe(
+                    send({"type": "image_progress", "p": p}), loop)
+
+        try:
+            out = await loop.run_in_executor(
+                None, lambda: self.model.edit(arr, edit_type, on_progress=progress))
+        except _Stopped:
+            await self._say(send, "Zatrzymane.")
+            return
+        except Exception as e:
+            await self._say(send, f"Coś poszło nie tak przy edycji: {e}")
+            return
+
+        await send({"type": "image_result", "image": encode_data_url(out),
+                    "label": label, "step": info.get("step")})
+        await self._say(send, "")
+
+    async def _say(self, send, text, done=True):
+        """Deliver a whole sentence through the same streaming shape the chat
+        model uses, so the renderer has exactly one way to append a reply."""
+        if text:
+            await send({"type": "step", "token": text, "done": False,
+                        "neurons": [], "probs": _NO_PROBS})
+        if done:
+            await send({"type": "step", "token": "", "done": True,
+                        "neurons": [], "probs": _NO_PROBS})
+
+
+class _Stopped(Exception):
+    pass
+
+
+_NO_PROBS = {"top": [], "entropy_norm": 0, "label": "confident"}
+
+
 class Backend:
     def __init__(self):
         self.cfg = GPTConfig()
@@ -102,6 +233,9 @@ class Backend:
         self.tok = Tokenizer.from_file(str(tok_path))
         self.ckpt_step = "?"
         self.ready = False
+        # Constructed, not loaded: this only stats a file path. The 22M-param
+        # network stays on disk until someone picks it.
+        self.images = ImageBackend()
 
     async def load(self, send):
         """Load weights and drive the Wake sequence.
@@ -129,7 +263,20 @@ class Backend:
 
         self.ready = True
         await send({"type": "ready", "step": self.ckpt_step,
-                    "params": self.model.num_params(), "checkpoint": path.name})
+                    "params": self.model.num_params(), "checkpoint": path.name,
+                    "models": self.model_list()})
+
+    def model_list(self):
+        """What the picker may offer. G-Images is listed even when its
+        checkpoint is missing, marked unavailable — a model that silently
+        disappears from the menu looks like a bug, while a greyed-out entry
+        explains itself."""
+        return [
+            {"id": "g-micro", "name": "G-Micro", "desc": "rozmowa",
+             "available": True},
+            {"id": "g-images", "name": "G-Images", "desc": "edycja zdjęć",
+             "available": self.images.available, "needs_image": True},
+        ]
 
     def _reduce_neurons(self, capture: Capture):
         """Full 12 layers, top-64 FFN activations per layer — see
@@ -267,7 +414,8 @@ async def handler(ws):
             return
     else:
         await send({"type": "ready", "step": backend.ckpt_step,
-                    "params": backend.model.num_params()})
+                    "params": backend.model.num_params(),
+                    "models": backend.model_list()})
 
     stop_event = asyncio.Event()
     pending = set()
@@ -280,12 +428,17 @@ async def handler(ws):
                 continue
             if msg.get("type") == "chat":
                 stop_event.clear()
-                task = asyncio.create_task(backend.chat(
-                    send, msg.get("text", ""),
-                    float(msg.get("temperature", 0.8)),
-                    int(msg.get("top_k", 50)),
-                    stop_event, rag=bool(msg.get("rag", False)),
-                    history=msg.get("history") or []))
+                if msg.get("model") == "g-images":
+                    coro = backend.images.run(
+                        send, msg.get("text", ""), msg.get("image") or "", stop_event)
+                else:
+                    coro = backend.chat(
+                        send, msg.get("text", ""),
+                        float(msg.get("temperature", 0.8)),
+                        int(msg.get("top_k", 50)),
+                        stop_event, rag=bool(msg.get("rag", False)),
+                        history=msg.get("history") or [])
+                task = asyncio.create_task(coro)
                 pending.add(task)
                 task.add_done_callback(pending.discard)
             elif msg.get("type") == "stop":

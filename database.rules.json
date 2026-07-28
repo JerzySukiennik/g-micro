@@ -1,0 +1,26 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": "$room.length >= 20",
+        ".write": "$room.length >= 20",
+
+        "jobs": {
+          "$job": {
+            "model": { ".validate": "newData.val() == 'g-micro' || newData.val() == 'g-images'" },
+            "text": { ".validate": "newData.isString() && newData.val().length <= 2000" },
+            "image": { ".validate": "newData.isString() && newData.val().length <= 400000" },
+            "at": { ".validate": "newData.isNumber()" },
+            "history": { ".validate": "true" },
+            "cancel": { ".validate": "newData.isBoolean()" },
+            "$other": { ".validate": "false" }
+          }
+        },
+
+        "out": { ".validate": "true" },
+        "mac": { ".validate": "true" },
+        "$other": { ".validate": "false" }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "hosting": {
+    "public": "web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "//": "Nothing here is content-hashed, so the browser must ask before reusing anything. no-cache means revalidate, not re-download: the ETag makes an unchanged file a 304. Without this a deploy took up to an hour to reach a phone that had already loaded the old app.js.",
+        "source": "**",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache" }
+        ]
+      }
+    ]
+  }
+}

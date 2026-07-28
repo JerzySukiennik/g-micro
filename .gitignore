@@ -22,3 +22,6 @@ __pycache__/
 
 # electron deps (regenerable via npm install)
 app/node_modules/
+
+# Firebase Hosting deploy cache
+.firebase/

@@ -8,33 +8,38 @@
  * running after the window closes, and no terminal ever shown.
  */
 
-const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
-const { spawn } = require('node:child_process');
+const os = require('node:os');
+const { spawn, execFileSync } = require('node:child_process');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const VENV_PYTHON = path.join(REPO_ROOT, '.venv', 'bin', 'python');
 const SERVER_SCRIPT = path.join(REPO_ROOT, 'runtime', 'server.py');
+const BRIDGE_SCRIPT = path.join(REPO_ROOT, 'runtime', 'bridge.py');
 const PID_FILE = path.join(app.getPath('userData'), 'backend.pid');
+const BRIDGE_PID_FILE = path.join(app.getPath('userData'), 'bridge.pid');
+const BRIDGE_PREF = path.join(app.getPath('userData'), 'bridge.json');
 const CONV_DIR = path.join(app.getPath('userData'), 'conversations');
 
 let win = null;
 let backend = null;
+let bridge = null;
 
 // ---------------------------------------------------------------- orphan guard --
-function killOrphanFromPreviousRun() {
-  if (!fs.existsSync(PID_FILE)) return;
-  const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+function killOrphanFromPreviousRun(pidFile = PID_FILE, label = 'backend') {
+  if (!fs.existsSync(pidFile)) return;
+  const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
   if (!Number.isInteger(pid)) return;
   try {
     process.kill(pid, 0);          // throws if the process is not running
     process.kill(pid, 'SIGTERM');  // it is — Electron crashed hard last time
-    console.log(`[main] killed orphaned backend pid ${pid} from a previous crash`);
+    console.log(`[main] killed orphaned ${label} pid ${pid} from a previous crash`);
   } catch {
     // already dead — nothing to do
   } finally {
-    fs.rmSync(PID_FILE, { force: true });
+    fs.rmSync(pidFile, { force: true });
   }
 }
 
@@ -53,6 +58,76 @@ function killBackend() {
   if (!backend || backend.killed) return;
   backend.kill('SIGTERM');
   fs.rmSync(PID_FILE, { force: true });
+}
+
+// ------------------------------------------------------------------- bridge --
+// Lets the phone reach these models from anywhere, by way of a Realtime
+// Database both ends connect *out* to — nothing here listens for the internet.
+//
+// It is a separate process holding its own copy of the model rather than
+// sharing the backend's, which costs roughly half a gigabyte. That buys the
+// property that matters more: `python runtime/bridge.py` works on its own, so
+// the phone keeps working when this app is closed.
+//
+// Off unless asked for. Something that makes a computer reachable from outside
+// the house should be a decision, not a default nobody was shown.
+function bridgeWanted() {
+  try { return Boolean(JSON.parse(fs.readFileSync(BRIDGE_PREF, 'utf8')).enabled); }
+  catch { return false; }
+}
+
+function setBridgeWanted(enabled) {
+  fs.writeFileSync(BRIDGE_PREF, JSON.stringify({ enabled }));
+}
+
+function spawnBridge() {
+  if (bridge) return;
+  bridge = spawn(VENV_PYTHON, [BRIDGE_SCRIPT], { cwd: REPO_ROOT });
+  fs.writeFileSync(BRIDGE_PID_FILE, String(bridge.pid));
+  bridge.stdout.on('data', (d) => process.stdout.write(`[bridge] ${d}`));
+  bridge.stderr.on('data', (d) => process.stderr.write(`[bridge] ${d}`));
+  bridge.on('exit', (code) => {
+    console.log(`[main] bridge exited (${code})`);
+    bridge = null;
+    fs.rmSync(BRIDGE_PID_FILE, { force: true });
+  });
+}
+
+function killBridge() {
+  if (!bridge || bridge.killed) return;
+  bridge.kill('SIGTERM');
+  bridge = null;
+  fs.rmSync(BRIDGE_PID_FILE, { force: true });
+}
+
+function phoneLink() {
+  return execFileSync(VENV_PYTHON, [BRIDGE_SCRIPT, '--print-url'],
+                      { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+}
+
+function showPhoneLink() {
+  let url;
+  try {
+    url = phoneLink();
+  } catch (e) {
+    dialog.showMessageBox(win, { type: 'error', message: 'Nie mogę odczytać adresu',
+                                 detail: String(e) });
+    return;
+  }
+  dialog.showMessageBox(win, {
+    type: 'info',
+    message: 'Link na telefon',
+    // Said plainly, because it is true and it is the whole security model:
+    // there is no password beyond this address.
+    detail: `${url}\n\nKto ma ten link, ten może wysyłać zadania do tego Maca. `
+          + 'Nie wrzucaj go nigdzie publicznie. Model odpowiada tylko wtedy, '
+          + 'gdy „Wpuszczaj telefon” jest włączone, a Mac nie śpi.',
+    buttons: ['Kopiuj link', 'Zamknij'],
+    defaultId: 0,
+    cancelId: 1,
+  }).then(({ response }) => {
+    if (response === 0) clipboard.writeText(url);
+  });
 }
 
 // -------------------------------------------------------------------- window --
@@ -156,6 +231,27 @@ function buildMenu() {
           click: (item) => win?.webContents.send('shortcut:rag', item.checked) },
         { label: 'Pokaż wprowadzenie',
           click: () => win?.webContents.send('shortcut:onboarding') },
+        { type: 'separator' },
+        { label: 'Wpuszczaj telefon', type: 'checkbox', checked: bridgeWanted(),
+          click: (item) => {
+            setBridgeWanted(item.checked);
+            item.checked ? spawnBridge() : killBridge();
+          } },
+        { label: 'Link na telefon…', click: showPhoneLink },
+        { label: 'Nowy link (unieważnia stary)', click: () => {
+          const {response} = {response: dialog.showMessageBoxSync(win, {
+            type: 'warning', message: 'Wygenerować nowy link?',
+            detail: 'Stary adres przestanie działać na wszystkich urządzeniach, '
+                  + 'na których jest zapisany.',
+            buttons: ['Wygeneruj nowy', 'Anuluj'], defaultId: 1, cancelId: 1,
+          })};
+          if (response !== 0) return;
+          killBridge();
+          execFileSync(VENV_PYTHON, [BRIDGE_SCRIPT, '--new-room', '--print-url'],
+                       { cwd: REPO_ROOT, encoding: 'utf8' });
+          if (bridgeWanted()) spawnBridge();
+          showPhoneLink();
+        } },
       ],
     },
     {
@@ -173,7 +269,11 @@ function buildMenu() {
 // -------------------------------------------------------------------- lifecycle --
 app.whenReady().then(() => {
   killOrphanFromPreviousRun();
+  // Two bridges on one room would both answer every job and race each other's
+  // writes, so a survivor of a hard crash has to go before a new one starts.
+  killOrphanFromPreviousRun(BRIDGE_PID_FILE, 'bridge');
   spawnBackend();
+  if (bridgeWanted()) spawnBridge();
   buildMenu();
   createWindow();
 
@@ -184,8 +284,9 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   killBackend();
+  killBridge();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', killBackend);
-app.on('will-quit', killBackend);
+app.on('before-quit', () => { killBackend(); killBridge(); });
+app.on('will-quit', () => { killBackend(); killBridge(); });

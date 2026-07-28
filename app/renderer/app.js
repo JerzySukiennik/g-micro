@@ -10,6 +10,7 @@ import { Wake } from './wake.js';
 import { ChatView } from './chat.js';
 import { History } from './history.js';
 import { Onboarding } from './onboarding.js';
+import { Attachment, ModelPicker } from './composer.js';
 import { SpringLoop, SPRING } from './spring.js';
 
 const WS_URL = 'ws://localhost:8899';
@@ -89,6 +90,8 @@ const RECONNECT_LIMIT = 20;   // ~30s of backoff before admitting defeat
 // the denominator, which is where the nonsense "1667 tok/s" readings came
 // from. Averaging over a span turns those bursts back into the real rate.
 let lastAssistantText = '';
+let lastAssistantImage = null;
+let lastAssistantLabel = '';
 
 // ------------------------------------------------------------------- Wake --
 const wake = new Wake($('#wake-canvas'), () => {
@@ -99,6 +102,42 @@ const wake = new Wake($('#wake-canvas'), () => {
 
 // ------------------------------------------------------------------- chat --
 const chat = new ChatView($('#messages'));
+
+// --------------------------------------------------------------- composer --
+const HINTS = {
+  'g-micro': 'G-Micro jest bardzo małym modelem i często się myli.',
+  'g-images': 'G-Images zna skończoną listę przeróbek. Jedna zajmuje ~35 s.',
+};
+
+const picker = new ModelPicker({onChange: (id) => applyModel(id)});
+// Attaching a photo *is* choosing G-Images — G-Micro has no way to look at a
+// picture, so leaving the choice to the user here would only let them make the
+// one choice that cannot work.
+const attachment = new Attachment({onChange: (url) => {
+  if (url && picker.current !== 'g-images') picker.select('g-images');
+  updatePlaceholder();
+}});
+
+// Publish the composer's real height so the transcript can reserve exactly
+// that much room underneath. It changes whenever a photo is attached or
+// removed, so it is observed rather than read once.
+const composerEl = $('#input-composer');
+new ResizeObserver(() => {
+  $('#conversation-pane').style.setProperty('--composer-h', `${composerEl.offsetHeight}px`);
+}).observe(composerEl);
+
+function applyModel(id) {
+  $('#composer-hint').textContent = HINTS[id] || '';
+  updatePlaceholder();
+  inputField.focus();
+}
+
+function updatePlaceholder() {
+  inputField.placeholder = !modelReady ? 'Budzę model…'
+    : picker.current !== 'g-images' ? 'Napisz wiadomość…'
+    : attachment.dataUrl ? 'Co mam zmienić? Np. „zrób to czarno-białe”'
+    : 'Dodaj zdjęcie spinaczem obok';
+}
 
 /**
  * The send button becomes a stop button while the model is writing.
@@ -144,8 +183,13 @@ async function loadConversation(id) {
   messages = conv.messages || [];
   chat.clear();
   for (const m of messages) {
-    if (m.role === 'user') chat.addUserMessage(m.text);
-    else { chat.beginAssistantMessage(); chat.appendToken(m.text); chat.endAssistantMessage(); }
+    if (m.role === 'user') chat.addUserMessage(m.text, m.image);
+    else {
+      chat.beginAssistantMessage();
+      chat.appendToken(m.text);
+      if (m.image) chat.addImage(m.image, m.imageLabel || '');
+      chat.endAssistantMessage();
+    }
   }
 }
 
@@ -190,12 +234,14 @@ sendBtn.addEventListener('click', () => {
 function sendMessage() {
   const text = inputField.value.trim();
   if (!text || generating || !modelReady) return;
+  const model = picker.current;
+  const image = model === 'g-images' ? attachment.dataUrl : null;
   inputField.value = '';
   autoGrow();
   sendBtn.classList.add('disabled');
 
-  messages.push({ role: 'user', text });
-  chat.addUserMessage(text);
+  messages.push({ role: 'user', text, image });
+  chat.addUserMessage(text, image);
   chat.beginAssistantMessage();
   generating = true;
   setComposerMode('stop');
@@ -209,7 +255,7 @@ function sendMessage() {
       history.unshift({ user: u.text, assistant: a.text });
     }
   }
-  ws.send(JSON.stringify({ type: 'chat', text, history, ...GENERATION }));
+  ws.send(JSON.stringify({ type: 'chat', text, history, model, image, ...GENERATION }));
 }
 
 // -------------------------------------------------------------- keyboard --
@@ -253,11 +299,26 @@ function connect() {
         modelReady = true;
         modelEverReady = true;
         wake.finish();
-        inputField.placeholder = 'Napisz wiadomość…';
+        picker.setModels(msg.models);
+        updatePlaceholder();
         break;
 
       case 'context':
         chat.setContextSource(msg.source);
+        break;
+
+      case 'image_progress':
+        chat.setProgress(msg.p);
+        break;
+
+      case 'image_result':
+        lastAssistantImage = msg.image;
+        lastAssistantLabel = msg.label || '';
+        chat.addImage(msg.image, msg.label);
+        // The result becomes the source for whatever is asked next, so edits
+        // chain. The chip in the composer shows which picture that is, and the
+        // × still removes it — this changes the default, not the choice.
+        attachment.adopt(msg.image, `wynik: ${msg.label}`);
         break;
 
       case 'step': {
@@ -270,8 +331,11 @@ function connect() {
           setComposerMode('send');
           chat.endAssistantMessage();
           generating = false;
-          messages.push({ role: 'assistant', text: lastAssistantText });
+          messages.push({ role: 'assistant', text: lastAssistantText,
+                          image: lastAssistantImage, imageLabel: lastAssistantLabel });
           lastAssistantText = '';
+          lastAssistantImage = null;
+          lastAssistantLabel = '';
           persistConversation();
         }
         break;
