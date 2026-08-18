@@ -225,7 +225,12 @@ class ImageBackend:
 
         from runtime.images import LABELS
         label = LABELS.get(edit_type, edit_type)
-        await self._say(send, f"Robię: {label}. To potrwa jakieś dwie minuty — "
+        # Measured on this Mac from the preview run on 2026-08-19, not guessed:
+        # the 70.5M network takes about five minutes per edit and the 22.4M one
+        # about two. "Two minutes" was the old blanket answer and it was wrong by
+        # more than double for the model people actually land on.
+        minutes = "pięć" if model.version == "g-images" else "dwie"
+        await self._say(send, f"Robię: {label}. To potrwa jakieś {minutes} minut(y) — "
                               f"model liczy na procesorze.", done=False)
         await send({"type": "image_progress", "p": 0.0})
 
