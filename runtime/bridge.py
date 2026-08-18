@@ -44,7 +44,7 @@ import requests
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 from runtime.server import Backend, model_list  # noqa: E402
-from runtime.images import ImageModel  # noqa: E402
+from runtime.images import ImageModel, VERSIONS as IMAGE_MODELS  # noqa: E402
 
 # Two sites now run this same protocol over two different Firebase projects:
 # the original G-Micro page, and Narew Labs at ai.gzowo.fun. The wire format,
@@ -385,7 +385,18 @@ class Bridge:
                     with self.lock:
                         if not self.jobs:
                             break
-                        client, job_id, payload = self.jobs.pop(0)
+                        # Text first, always. One edit is roughly two minutes of
+                        # solid CPU, so a couple of queued pictures used to make
+                        # chat look dead: the message sat behind them, the page's
+                        # own watchdog gave up, and the Mac was answering the
+                        # whole time. Ordering by kind rather than by arrival
+                        # costs the pictures nothing they notice and stops a
+                        # sentence from waiting on a landscape.
+                        idx = next(
+                            (i for i, j in enumerate(self.jobs)
+                             if j[2].get("model", "g-micro") not in IMAGE_MODELS),
+                            0)
+                        client, job_id, payload = self.jobs.pop(idx)
                     self._handle(client, job_id, payload)
                     self.last_job = time.time()
                 self.maybe_unload()
@@ -451,8 +462,7 @@ class Bridge:
         # model is the only thing that is not one of them. Falling through to
         # chat for an unknown image id used to answer a picture request with a
         # sentence, which reads as the model being broken rather than absent.
-        from runtime.images import VERSIONS
-        if model in VERSIONS:
+        if model in IMAGE_MODELS:
             await self.backend.images.run(send, payload.get("text", ""),
                                           payload.get("image") or "", stop,
                                           version=model)
