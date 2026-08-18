@@ -134,6 +134,39 @@ def encode_data_url(arr: np.ndarray, scale: int = 3) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+def model_list(images_available: bool = None):
+    """What the picker may offer.
+
+    Every image version this machine has a checkpoint for gets its own entry
+    under its own id, because the browser picks a version and has to be told
+    truthfully whether that exact one can answer. Listing only the newest made
+    every other version look asleep forever: the page was waiting for a name the
+    Mac never published.
+
+    Entries stay in the list when their checkpoint is missing, marked
+    unavailable — a model that silently disappears from the menu looks like a
+    bug, while a greyed-out entry explains itself.
+
+    A plain function, not a method, because the bridge publishes this list in
+    every heartbeat and must be able to do so without a loaded model: asking a
+    Backend would defeat the whole point of dropping the weights while idle. The
+    argument is ignored and kept only so older callers still work.
+    """
+    from runtime.images import VERSIONS, ImageModel
+
+    models = [{"id": "g-micro", "name": "G-Micro", "desc": "rozmowa",
+               "available": True}]
+    for wire, spec in VERSIONS.items():
+        models.append({
+            "id": wire,
+            "name": spec["name"],
+            "desc": spec["desc"],
+            "available": ImageModel(wire).available(),
+            "needs_image": True,
+        })
+    return models
+
+
 class ImageBackend:
     """G-Images as a second model behind the same socket.
 
@@ -143,39 +176,56 @@ class ImageBackend:
     """
 
     def __init__(self):
-        self.model = ImageModel()
+        # One loaded network per version. Sharing a single slot would mean the
+        # 22M and 70.5M checkpoints evicting each other on every switch, and a
+        # switch is one click in the picker.
+        self.models = {}
+
+    def for_version(self, version):
+        from runtime.images import VERSIONS, DEFAULT_VERSION
+        if version not in VERSIONS:
+            version = DEFAULT_VERSION
+        if version not in self.models:
+            self.models[version] = ImageModel(version)
+        return self.models[version]
+
+    @property
+    def model(self):
+        """The default version, for callers that predate the version argument."""
+        return self.for_version(None)
 
     @property
     def available(self):
         return self.model.available()
 
-    async def run(self, send, text, image_url, stop_event):
+    async def run(self, send, text, image_url, stop_event, version=None):
         if not image_url:
             await self._say(send, "Dodaj zdjęcie — bez niego nie mam czego zmienić. "
                                   "Kliknij spinacz obok pola tekstowego.")
             return
 
+        model = self.for_version(version)
         loop = asyncio.get_running_loop()
         try:
-            info = await loop.run_in_executor(None, self.model.load)
+            info = await loop.run_in_executor(None, model.load)
         except Exception as e:
             await self._say(send, f"Nie udało mi się wczytać G-Images: {e}")
             return
 
-        edit_type = self.model.match(text)
+        edit_type = model.match(text)
         if edit_type is None:
-            labels = ", ".join(self.model.known_labels())
+            labels = ", ".join(model.known_labels())
             await self._say(
                 send,
                 "Nie rozumiem tej zmiany. G-Images nie czyta zdań — zna skończoną "
-                f"listę {len(self.model.known_labels())} przeróbek i to wszystko, "
+                f"listę {len(model.known_labels())} przeróbek i to wszystko, "
                 f"czego się nauczył:\n\n{labels}\n\n"
                 "Napisz coś z tej listy, np. „zrób to czarno-białe”.")
             return
 
         from runtime.images import LABELS
         label = LABELS.get(edit_type, edit_type)
-        await self._say(send, f"Robię: {label}. To potrwa jakieś pół minuty — "
+        await self._say(send, f"Robię: {label}. To potrwa jakieś dwie minuty — "
                               f"model liczy na procesorze.", done=False)
         await send({"type": "image_progress", "p": 0.0})
 
@@ -194,7 +244,7 @@ class ImageBackend:
 
         try:
             out = await loop.run_in_executor(
-                None, lambda: self.model.edit(arr, edit_type, on_progress=progress))
+                None, lambda: model.edit(arr, edit_type, on_progress=progress))
         except _Stopped:
             await self._say(send, "Zatrzymane.")
             return
@@ -267,16 +317,7 @@ class Backend:
                     "models": self.model_list()})
 
     def model_list(self):
-        """What the picker may offer. G-Images is listed even when its
-        checkpoint is missing, marked unavailable — a model that silently
-        disappears from the menu looks like a bug, while a greyed-out entry
-        explains itself."""
-        return [
-            {"id": "g-micro", "name": "G-Micro", "desc": "rozmowa",
-             "available": True},
-            {"id": "g-images", "name": "G-Images", "desc": "edycja zdjęć",
-             "available": self.images.available, "needs_image": True},
-        ]
+        return model_list(self.images.available)
 
     def _reduce_neurons(self, capture: Capture):
         """Full 12 layers, top-64 FFN activations per layer — see

@@ -26,12 +26,58 @@ import torch
 
 G_IMAGES = Path.home() / "Downloads/Claude/Projects/AIe/G-Images"
 
-# Checkpoints newest first.
-CKPTS = [
-    G_IMAGES / "kaggle-run/output-v4/run/ckpt.pt",
-    G_IMAGES / "kaggle-run/output-v3/run/ckpt.pt",
-    G_IMAGES / "kaggle-run/output-train/run/ckpt.pt",
-]
+# The image models this Mac can actually serve, by the name the browser asks for.
+#
+# There is more than one entry because there is more than one architecture. The
+# 22.4M generation and the 70.5M generation are different networks, not different
+# training lengths: loading one into the other raises a wall of "size mismatch
+# for up_attns.3.norm.weight: torch.Size([64]) vs [128]" and every edit fails.
+# Treating them as a fallback chain cost a live debugging session once; keeping
+# each version with the shape it was trained at is what makes both loadable.
+#
+# `arch` was not guessed. It is read back off the weights: in_conv gives
+# base_channels and the down-path conv widths give the multipliers, which is how
+# 64/(1,2,4,4) was recovered for the 22M run. Verified: 0 missing keys, 0
+# unexpected, 22.4M parameters.
+VERSIONS = {
+    "g-images": {
+        "name": "G-Images",
+        "desc": "edycja zdjęć",
+        "ckpts": [
+            G_IMAGES / "kaggle-run/out-vb/run/ckpt.pt",
+            G_IMAGES / "kaggle-run/out-v12/run/ckpt.pt",
+            G_IMAGES / "kaggle-run/out-v10/run/ckpt.pt",
+        ],
+        "arch": {"base_channels": 128, "channel_mults": (1, 2, 3, 4)},
+    },
+    "g-image-1": {
+        "name": "G-Image 1",
+        "desc": "pierwsza wersja, 22M",
+        "ckpts": [
+            G_IMAGES / "kaggle-run/out-v9/run/ckpt.pt",
+            G_IMAGES / "kaggle-run/out-v8/run/ckpt.pt",
+        ],
+        "arch": {"base_channels": 64, "channel_mults": (1, 2, 4, 4)},
+    },
+}
+
+DEFAULT_VERSION = "g-images"
+
+# Kept so nothing that imported the old name breaks.
+CKPTS = VERSIONS[DEFAULT_VERSION]["ckpts"]
+
+# A checkpoint whose download died leaves a zero-byte file that still "exists",
+# and picking it by name alone would look exactly like a missing model — there
+# is one such file in kaggle-run right now (out-final). Torch needs a few
+# hundred megabytes here, so anything trivially small is a corpse.
+MIN_CKPT_BYTES = 10_000_000
+
+
+def usable(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size >= MIN_CKPT_BYTES
+    except OSError:
+        return False
 
 RES = 128           # the resolution every checkpoint so far was trained at
 STEPS = 60          # edit_photo.py: "Don't judge quality below ~50"
@@ -115,21 +161,25 @@ class ImageModel:
     is the only version that can possibly be right.
     """
 
-    def __init__(self):
+    def __init__(self, version=None):
+        # Which of VERSIONS this instance serves. One object per version, so a
+        # loaded 70.5M network is never handed a 22M checkpoint's weights.
+        self.version = version or DEFAULT_VERSION
         self.net = None
         self.schedule = None
         self.type_names = []
         self.info = None
 
     def available(self) -> bool:
-        return any(p.exists() for p in CKPTS)
+        return any(usable(p) for p in VERSIONS[self.version]["ckpts"])
 
     def load(self):
         if self.net is not None:
             return self.info
-        path = next((p for p in CKPTS if p.exists()), None)
+        spec = VERSIONS[self.version]
+        path = next((p for p in spec["ckpts"] if usable(p)), None)
         if path is None:
-            raise RuntimeError("nie znaleziono checkpointu G-Images")
+            raise RuntimeError(f"nie znaleziono checkpointu dla {spec['name']}")
 
         sys.path.insert(0, str(G_IMAGES))
         from model.unet import UNet
@@ -146,7 +196,8 @@ class ImageModel:
                 "kolejność typów w G-Images się zmieniła — indeksy w checkpointie "
                 "nie odpowiadają już nazwom, trzeba zmapować je ręcznie")
 
-        net = UNet(n_types=n_types)
+        # The architecture belongs to the version, not to this file's defaults.
+        net = UNet(n_types=n_types, **spec["arch"])
         net.load_state_dict({k: v.to(net.state_dict()[k].dtype) for k, v in state.items()})
         net.eval()
 
@@ -154,6 +205,7 @@ class ImageModel:
         self.schedule = DiffusionSchedule(schedule="cosine", prediction="v", device="cpu")
         self.type_names = names
         self.info = {"step": ck.get("step"), "n_types": n_types,
+                     "version": self.version,
                      "checkpoint": path.parent.parent.name,
                      "params": sum(p.numel() for p in net.parameters())}
         return self.info
