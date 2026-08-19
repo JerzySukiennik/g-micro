@@ -95,6 +95,11 @@ ROOT = "open"
 FLUSH_EVERY = 0.15
 HEARTBEAT_EVERY = 20          # seconds; the web app calls the Mac offline at 60
 
+# How long the job stream may say nothing before it is treated as dead. Firebase
+# emits a keep-alive comment far inside this, so anything longer is a socket
+# that is no longer attached to anything.
+STREAM_SILENCE = 75
+
 # Refresh well before the hour Firebase gives an id token, so a long photo edit
 # never runs out mid-write.
 TOKEN_TTL = 50 * 60
@@ -243,8 +248,18 @@ class Bridge:
                 # The token is minted per connection; the stream is torn down and
                 # remade well inside the token's lifetime by the loop below.
                 url = f"{self.base}.json?auth={self.identity.token()}"
+                # A real read timeout, and it is the whole reason this loop can
+                # recover. It used to be None, which is infinite: when the
+                # connection died quietly - a wifi flap, a NAT table dropping an
+                # idle entry, the DNS failures this machine logs - readline()
+                # simply blocked for ever. Nothing raised, so nothing retried,
+                # and because presence is written by a different thread the
+                # bridge went on announcing itself as online for hours while not
+                # receiving a single job. Firebase sends a keep-alive on this
+                # stream well inside a minute, so silence past STREAM_SILENCE
+                # means the connection is gone, not quiet.
                 with requests.get(url, headers=headers,
-                                  stream=True, timeout=(10, None)) as r:
+                                  stream=True, timeout=(10, STREAM_SILENCE)) as r:
                     r.raise_for_status()
                     event = None
                     # `r.raw.readline()`, not `r.iter_lines()`. iter_lines asks
