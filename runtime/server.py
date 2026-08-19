@@ -164,7 +164,87 @@ def model_list(images_available: bool = None):
             "available": ImageModel(wire).available(),
             "needs_image": True,
         })
+    from runtime.doodle import DoodleModel
+    models.append({
+        "id": "g-doodle",
+        "name": "G-Doodle",
+        "desc": "rysuje kreska po kresce",
+        "available": DoodleModel().available(),
+        "needs_text": True,
+    })
     return models
+
+
+class DoodleBackend:
+    """G-Doodle behind the same socket as everything else.
+
+    On a worker thread for the same reason as images: sampling is ~45 ms per
+    token for a few hundred tokens, and holding the event loop for five seconds
+    would freeze the stop button along with the socket.
+    """
+
+    def __init__(self):
+        self.model = None
+
+    def _get(self):
+        from runtime.doodle import DoodleModel
+        if self.model is None:
+            self.model = DoodleModel()
+        return self.model
+
+    @property
+    def available(self):
+        return self._get().available()
+
+    async def run(self, send, text, stop_event):
+        from runtime.doodle import strokes_to_json
+        model = self._get()
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, model.load)
+        except Exception as e:
+            await self._say(send, f"Nie udało mi się wczytać G-Doodle: {e}")
+            return
+
+        hit = model.resolve(text or "")
+        if not hit.get("category"):
+            alts = ", ".join(hit.get("alternatives") or [])
+            extra = f" Najbliższe, co znam: {alts}." if alts else ""
+            await self._say(
+                send,
+                "Nie znam tego. G-Doodle rysuje 345 rzeczy i tylko je - "
+                f"wolny tekst dopasowuję do tej listy.{extra}")
+            return
+
+        label = hit.get("label") or hit["category"]
+        await self._say(send, f"Rysuję: {label}.", done=False)
+
+        def on_strokes(strokes, done):
+            if stop_event.is_set():
+                raise _Stopped()
+            asyncio.run_coroutine_threadsafe(
+                send({"type": "doodle", "strokes": strokes_to_json(strokes),
+                      "label": label, "done": done}), loop)
+
+        try:
+            await loop.run_in_executor(
+                None, lambda: model.draw(hit["category"], on_strokes=on_strokes))
+        except _Stopped:
+            await self._say(send, "Zatrzymane.")
+            return
+        except Exception as e:
+            await self._say(send, f"Coś poszło nie tak przy rysowaniu: {e}")
+            return
+
+        await self._say(send, "")
+
+    async def _say(self, send, text, done=True):
+        if text:
+            await send({"type": "step", "token": text, "done": False,
+                        "neurons": [], "probs": _NO_PROBS})
+        if done:
+            await send({"type": "step", "token": "", "done": True,
+                        "neurons": [], "probs": _NO_PROBS})
 
 
 class ImageBackend:
@@ -200,7 +280,7 @@ class ImageBackend:
 
     async def run(self, send, text, image_url, stop_event, version=None):
         if not image_url:
-            await self._say(send, "Dodaj zdjęcie — bez niego nie mam czego zmienić. "
+            await self._say(send, "Dodaj zdjęcie - bez niego nie mam czego zmienić. "
                                   "Kliknij spinacz obok pola tekstowego.")
             return
 
@@ -217,9 +297,9 @@ class ImageBackend:
             labels = ", ".join(model.known_labels())
             await self._say(
                 send,
-                "Nie rozumiem tej zmiany. G-Images nie czyta zdań — zna skończoną "
+                "Nie rozumiem tej zmiany. G-Images nie czyta zdań - zna skończoną "
                 f"listę {len(model.known_labels())} przeróbek i to wszystko, "
-                f"czego się nauczył:\n\n{labels}\n\n"
+                f"czego się nauczył:\n\n{labels}.\n\n"
                 "Napisz coś z tej listy, np. „zrób to czarno-białe”.")
             return
 
@@ -230,7 +310,7 @@ class ImageBackend:
         # about two. "Two minutes" was the old blanket answer and it was wrong by
         # more than double for the model people actually land on.
         minutes = "pięć" if model.version == "g-images" else "dwie"
-        await self._say(send, f"Robię: {label}. To potrwa jakieś {minutes} minut(y) — "
+        await self._say(send, f"Robię: {label}. To potrwa jakieś {minutes} minut(y) - "
                               f"model liczy na procesorze.", done=False)
         await send({"type": "image_progress", "p": 0.0})
 
@@ -291,6 +371,7 @@ class Backend:
         # Constructed, not loaded: this only stats a file path. The 22M-param
         # network stays on disk until someone picks it.
         self.images = ImageBackend()
+        self.doodle = DoodleBackend()
 
     async def load(self, send):
         """Load weights and drive the Wake sequence.

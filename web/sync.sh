@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 SRC=../app/renderer
-for f in style.css chat.js format.js composer.js onboarding.js history.js; do
+for f in style.css chat.js format.js composer.js history.js; do
   cp "$SRC/$f" "./$f"
   echo "  $f"
 done

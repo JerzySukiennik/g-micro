@@ -9,7 +9,6 @@
 import { Wake } from './wake.js';
 import { ChatView } from './chat.js';
 import { History } from './history.js';
-import { Onboarding } from './onboarding.js';
 import { Attachment, ModelPicker } from './composer.js';
 import { SpringLoop, SPRING } from './spring.js';
 
@@ -57,13 +56,6 @@ function fillSuggestions() {
   host.innerHTML = pick
     .map((s) => `<button class="suggestion" data-text="${s}">${s}</button>`)
     .join('');
-}
-
-/** Greets by name once onboarding has one. The model is never told — it was
- *  not trained to use a name and would spend context on it for nothing. */
-function applyName(name) {
-  const h = document.querySelector('#welcome h1');
-  if (h) h.textContent = name ? `Cześć, ${name}.` : 'Cześć, jestem G-Micro.';
 }
 
 // ---------------------------------------------------------------- elements --
@@ -198,7 +190,6 @@ function startNewConversation() {
   messages = [];
   chat.clear();
   fillSuggestions();
-  applyName(Onboarding.name());
   history.setActive(null);
   inputField.focus();
 }
@@ -269,12 +260,8 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-const onboarding = new Onboarding({onFinish: (name) => { applyName(name); inputField.focus(); }});
-if (!Onboarding.seen()) onboarding.open();
-applyName(Onboarding.name());
 fillSuggestions();
 
-window.gmicro?.onShortcut?.('onboarding', () => onboarding.open());
 window.gmicro?.onShortcut?.('rag', (_e, enabled) => { GENERATION.rag = Boolean(enabled); });
 window.gmicro?.onShortcut?.('new', startNewConversation);
 window.gmicro?.onShortcut?.('history', () => history.toggle());

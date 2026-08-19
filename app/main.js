@@ -1,5 +1,5 @@
 /**
- * G-Micro — Electron main process.
+ * Narew Labs — Electron main process.
  *
  * Owns the whole lifecycle of the Python backend, per UI-SPEC.md
  * "Powłoka i architektura": launch spawns it, quit kills it, and a PID-file
@@ -13,6 +13,17 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { spawn, execFileSync } = require('node:child_process');
+
+// The display name is Narew Labs; the on-disk identity stays "g-micro".
+//
+// userData is derived from the app name, so renaming the app would silently
+// point every path below (conversations, PID files, the bridge preference) at
+// a fresh empty folder and strand the history already saved under the old
+// name. Pinning userData to the original id keeps that data put through this
+// rebrand and any future one. Both calls must happen before the first
+// getPath('userData') a few lines down.
+app.setName('Narew Labs');
+app.setPath('userData', path.join(app.getPath('appData'), 'g-micro'));
 
 const REPO_ROOT = path.join(__dirname, '..');
 const VENV_PYTHON = path.join(REPO_ROOT, '.venv', 'bin', 'python');
@@ -69,8 +80,16 @@ function killBackend() {
 // property that matters more: `python runtime/bridge.py` works on its own, so
 // the phone keeps working when this app is closed.
 //
-// Off unless asked for. Something that makes a computer reachable from outside
-// the house should be a decision, not a default nobody was shown.
+// Off unless switched on, and that switch is now the only gate there is.
+//
+// The room stopped being a secret (open mode, see runtime/bridge.py), so
+// anyone who loads the site reaches whichever Mac is currently bridging. That
+// is workable precisely because it is off by default and Jurek turns it on for
+// as long as he is using it — but it only stays true if "off" is what a fresh
+// start means. An absent preference file therefore reads as off, not on.
+//
+// This reverses the auto-on default from earlier the same day; auto-on was
+// safe while a paired secret was required, and stopped being so without one.
 function bridgeWanted() {
   try { return Boolean(JSON.parse(fs.readFileSync(BRIDGE_PREF, 'utf8')).enabled); }
   catch { return false; }
@@ -116,13 +135,14 @@ function showPhoneLink() {
   }
   dialog.showMessageBox(win, {
     type: 'info',
-    message: 'Link na telefon',
-    // Said plainly, because it is true and it is the whole security model:
-    // there is no password beyond this address.
-    detail: `${url}\n\nKto ma ten link, ten może wysyłać zadania do tego Maca. `
-          + 'Nie wrzucaj go nigdzie publicznie. Model odpowiada tylko wtedy, '
-          + 'gdy „Wpuszczaj telefon” jest włączone, a Mac nie śpi.',
-    buttons: ['Kopiuj link', 'Zamknij'],
+    message: 'Adres na telefon',
+    // Said plainly, because it is the whole security model now: the address is
+    // public and the switch is the gate.
+    detail: `${url}\n\nAdres jest otwarty — nie ma linku ani hasła. Dopóki `
+          + '„Wpuszczaj telefon” jest wyłączone, nikt się tu nie doczeka '
+          + 'odpowiedzi. Gdy włączysz, odpowiada każdy, kto wejdzie na tę '
+          + 'stronę, więc włączaj na czas używania.',
+    buttons: ['Kopiuj adres', 'Zamknij'],
     defaultId: 0,
     cancelId: 1,
   }).then(({ response }) => {
@@ -229,29 +249,13 @@ function buildMenu() {
         // retrieval toggle, and a way back to the introduction.
         { label: 'Używaj Wikipedii', type: 'checkbox', checked: false,
           click: (item) => win?.webContents.send('shortcut:rag', item.checked) },
-        { label: 'Pokaż wprowadzenie',
-          click: () => win?.webContents.send('shortcut:onboarding') },
         { type: 'separator' },
         { label: 'Wpuszczaj telefon', type: 'checkbox', checked: bridgeWanted(),
           click: (item) => {
             setBridgeWanted(item.checked);
             item.checked ? spawnBridge() : killBridge();
           } },
-        { label: 'Link na telefon…', click: showPhoneLink },
-        { label: 'Nowy link (unieważnia stary)', click: () => {
-          const {response} = {response: dialog.showMessageBoxSync(win, {
-            type: 'warning', message: 'Wygenerować nowy link?',
-            detail: 'Stary adres przestanie działać na wszystkich urządzeniach, '
-                  + 'na których jest zapisany.',
-            buttons: ['Wygeneruj nowy', 'Anuluj'], defaultId: 1, cancelId: 1,
-          })};
-          if (response !== 0) return;
-          killBridge();
-          execFileSync(VENV_PYTHON, [BRIDGE_SCRIPT, '--new-room', '--print-url'],
-                       { cwd: REPO_ROOT, encoding: 'utf8' });
-          if (bridgeWanted()) spawnBridge();
-          showPhoneLink();
-        } },
+        { label: 'Adres na telefon…', click: showPhoneLink },
       ],
     },
     {

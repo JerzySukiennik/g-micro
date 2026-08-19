@@ -50,6 +50,14 @@ VERSIONS = {
         ],
         "arch": {"base_channels": 128, "channel_mults": (1, 2, 3, 4)},
     },
+    "g-image-2-1": {
+        "name": "G-Image 2.1",
+        "desc": "najnowszy, 98M",
+        "ckpts": [
+            G_IMAGES / "kaggle-run/out-21-68k/run/ckpt.pt",
+        ],
+        "arch": {"base_channels": 152, "channel_mults": (1, 2, 3, 4)},
+    },
     "g-image-1": {
         "name": "G-Image 1",
         "desc": "pierwsza wersja, 22M",

@@ -55,23 +55,7 @@
   .msg-copy, .conv-act { opacity: 1; }
 }
 
-/* ---- missing room ---------------------------------------------------- */
-
-#no-room {
-  position: fixed; inset: 0; display: flex; align-items: center;
-  justify-content: center; padding: 24px; background: var(--black);
-}
-#no-room[hidden] { display: none; }
-.nr-card {
-  max-width: 420px;
-  border: 1px solid var(--line); border-radius: var(--radius-l);
-  background: rgba(255,255,255,0.03); padding: 26px 24px;
-}
-.nr-card h2 { margin: 0 0 10px; font-size: 19px; font-weight: 500; }
-.nr-card p { margin: 0 0 16px; color: var(--ink-mid); font-size: 14px; line-height: 1.6; }
-.nr-card code {
-  display: block; font-family: var(--font-mono); font-size: 11.5px;
-  color: var(--ink-dim); background: rgba(255,255,255,0.04);
-  border-radius: var(--radius-s); padding: 9px 11px;
-  user-select: text; overflow-x: auto; white-space: nowrap;
-}
+/* The pairing card that used to live here went away with open mode: there is
+   no longer a state where the page has nothing to talk to. A Mac that is not
+   bridging now reads as "Mac śpi" in the title bar, which is the same fact
+   said in the place people already look. */

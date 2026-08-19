@@ -6,10 +6,11 @@
  * the answer back token by token; both ends only ever make outgoing
  * connections, so nothing at home is exposed to the network.
  *
- * The room id in the URL fragment is the whole of the access control. It never
- * reaches the database as a query — it *is* the path — and the rules refuse
- * anything shorter than twenty characters, so rooms cannot be guessed or
- * enumerated. Treat the link like a password.
+ * Each device gets its own space without anyone signing in: the browser makes
+ * a random client id on first visit and everything it does lives under that id
+ * alone. Another device cannot read it — the rules let only the Mac list the
+ * tree, so there is no way to discover which ids exist, and the id itself is
+ * 128 bits of randomness that never leaves this browser.
  */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -30,14 +31,16 @@ const CONFIG = {
 const STALE_AFTER = 70_000;
 
 export class MacBridge {
-  constructor(room, {onPresence}) {
-    this.room = room;
+  constructor(client, {onPresence}) {
+    this.client = client;
     this.db = getDatabase(initializeApp(CONFIG));
     this.onPresence = onPresence;
     this.online = false;
     this.lastBeat = 0;
 
-    onValue(ref(this.db, `rooms/${room}/mac`), (snap) => {
+    // Presence sits outside the per-client tree because a device has to learn
+    // whether the Mac is awake before it has written anything of its own.
+    onValue(ref(this.db, 'status/mac'), (snap) => {
       const v = snap.val() || {};
       this.lastBeat = v.at || 0;
       this.models = v.models || null;
@@ -64,9 +67,9 @@ export class MacBridge {
    * message can never leave half a sentence on screen.
    */
   run(job, onUpdate) {
-    const jobRef = push(ref(this.db, `rooms/${this.room}/jobs`));
+    const jobRef = push(ref(this.db, `open/${this.client}/jobs`));
     const id = jobRef.key;
-    const outRef = ref(this.db, `rooms/${this.room}/out/${id}`);
+    const outRef = ref(this.db, `open/${this.client}/out/${id}`);
 
     let settled = false;
     const finish = () => {
@@ -99,7 +102,7 @@ export class MacBridge {
       // Written *into* the job rather than somewhere else, because the Mac is
       // already streaming that node — a cancel lands mid-generation instead of
       // waiting for the next poll.
-      cancel: () => set(ref(this.db, `rooms/${this.room}/jobs/${id}/cancel`), true),
+      cancel: () => set(ref(this.db, `open/${this.client}/jobs/${id}/cancel`), true),
     };
   }
 }

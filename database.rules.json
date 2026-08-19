@@ -1,11 +1,19 @@
 {
   "rules": {
-    "rooms": {
-      "$room": {
-        ".read": "$room.length >= 20",
-        ".write": "$room.length >= 20",
+    "status": {
+      ".read": true,
+      "mac": { ".write": "auth.uid === 'IHyYvDFrQBZRHNxAoqiDkBHoByC2'" }
+    },
+
+    "open": {
+      ".read": "auth.uid === 'IHyYvDFrQBZRHNxAoqiDkBHoByC2'",
+
+      "$client": {
+        ".validate": "$client.length >= 20",
 
         "jobs": {
+          ".read": "auth.uid === 'IHyYvDFrQBZRHNxAoqiDkBHoByC2'",
+          ".write": true,
           "$job": {
             "model": { ".validate": "newData.val() == 'g-micro' || newData.val() == 'g-images'" },
             "text": { ".validate": "newData.isString() && newData.val().length <= 2000" },
@@ -17,8 +25,11 @@
           }
         },
 
-        "out": { ".validate": "true" },
-        "mac": { ".validate": "true" },
+        "out": {
+          ".read": true,
+          ".write": "auth.uid === 'IHyYvDFrQBZRHNxAoqiDkBHoByC2'"
+        },
+
         "$other": { ".validate": "false" }
       }
     }

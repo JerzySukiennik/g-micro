@@ -1,7 +1,8 @@
 {
-  "name": "g-micro",
+  "name": "narew-labs",
+  "productName": "Narew Labs",
   "version": "1.0.0",
-  "description": "100M parameters. 100% Gzowo.",
+  "description": "Narew Labs — modele językowe trenowane od zera nad Narwią.",
   "private": true,
   "main": "main.js",
   "scripts": {

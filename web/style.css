@@ -610,67 +610,6 @@ body.show-panel #input-composer { padding: 0 16px 16px; }
 #send-btn.stopping:hover { background: var(--ink); }
 #send-btn.stopping svg { width: 15px; height: 15px; }
 
-/* ---- onboarding --------------------------------------------------------- */
-#onboarding {
-  position: fixed; inset: 0; z-index: 200;
-  display: grid; place-items: center;
-  background: rgba(0,0,0,0.72);
-  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-  opacity: 0; transition: opacity 240ms ease-out;
-}
-#onboarding.visible { opacity: 1; }
-.ob-card {
-  width: min(540px, calc(100vw - 80px));
-  padding: 40px 42px 30px;
-  background: rgba(255,255,255,0.045);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-l);
-  transform: translateY(10px) scale(0.985);
-  transition: transform 320ms cubic-bezier(.2,.8,.2,1);
-}
-#onboarding.visible .ob-card { transform: none; }
-.ob-tag {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.18em;
-  text-transform: uppercase; color: var(--ink-dim); margin-bottom: 16px;
-}
-.ob-card h2 {
-  margin: 0 0 14px; font-size: 27px; font-weight: 500;
-  letter-spacing: -0.015em; color: var(--ink);
-}
-.ob-card p { margin: 0; font-size: 15px; line-height: 1.62; color: var(--ink-mid); }
-#ob-name {
-  margin-top: 22px; width: 100%; box-sizing: border-box;
-  background: var(--glass); border: 1px solid var(--line);
-  border-radius: var(--radius-m); padding: 13px 16px;
-  font-family: var(--font-ui); font-size: 16px; color: var(--ink);
-}
-#ob-name::placeholder { color: var(--ink-dim); }
-#ob-name:focus { outline: none; border-color: var(--line-strong); }
-.ob-foot {
-  margin-top: 30px; display: flex; align-items: center;
-  justify-content: space-between; gap: 20px;
-}
-.ob-dots { display: flex; gap: 7px; }
-.ob-dots span {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--line-strong); transition: background 220ms ease-out;
-}
-.ob-dots span.on { background: var(--ink); }
-.ob-actions { display: flex; align-items: center; gap: 8px; }
-.ob-skip {
-  font-size: 13.5px; color: var(--ink-dim); padding: 9px 12px; border-radius: var(--radius-s);
-}
-.ob-skip:hover { color: var(--ink-mid); }
-.ob-next {
-  font-size: 14.5px; color: var(--black); background: var(--ink-full);
-  padding: 10px 20px; border-radius: 999px; font-weight: 500;
-}
-.ob-next:hover { background: #fff; transform: translateY(-1px); }
-.ob-next:active { transform: translateY(0) scale(0.98); }
-@media (prefers-reduced-motion: reduce) {
-  #onboarding, .ob-card, .ob-next { transition: none; }
-}
-
 /* ---- history rows ------------------------------------------------------- */
 /* Controls stay hidden until the row is hovered: these lists are read far more
    often than they are managed. */

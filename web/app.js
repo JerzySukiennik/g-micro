@@ -9,7 +9,6 @@
 
 import { ChatView } from './chat.js';
 import { History } from './history.js';
-import { Onboarding, SCREENS } from './onboarding.js';
 import { Attachment, ModelPicker } from './composer.js';
 import { store } from './store.js';
 import { MacBridge } from './bridge.js';
@@ -35,48 +34,31 @@ const FALLBACK_MODELS = [
   {id: 'g-images', name: 'G-Images', desc: 'edycja zdjęć', available: true, needs_image: true},
 ];
 
-// ------------------------------------------------------------------- room --
+// ----------------------------------------------------------------- client --
 /**
- * Pair once, then never think about it again.
+ * This device's identity. Made here, on first visit, and never shown to anyone.
  *
- * The address of the Mac arrives in the URL fragment the first time — a
- * fragment, not a query string, so it is never sent to any server. From then
- * on it lives in this browser and the address bar is wiped clean, which is why
- * the second visit is just g-micro-web.web.app with nothing after it.
+ * It is what replaces a login. Everything this browser sends lives under this
+ * id and nothing else can reach it: the database rules let only the Mac list
+ * what ids exist, so there is nothing to enumerate, and the id itself is 128
+ * bits from the platform's cryptographic generator. Two people on the open
+ * address get two separate spaces without either of them typing a password.
  *
- * There is no login screen and there is still no way for a stranger to reach
- * the Mac: what they would be missing is not a password they could guess but
- * an address they have never seen. Losing the phone is the real risk, and the
- * answer to that is "Nowy link" on the Mac, which orphans every device at once.
+ * Clearing site data means a new id — a fresh space, with the old one
+ * abandoned. That is the same trade as clearing cookies anywhere else.
  */
-const ROOM_KEY = 'gmicro.room';
+const CLIENT_KEY = 'gmicro.client';
 
-function resolveRoom() {
-  const fromUrl = location.hash.replace(/^#/, '').trim();
-  if (fromUrl.length >= 20) {
-    localStorage.setItem(ROOM_KEY, fromUrl);
-    // Strip it from the address bar so the secret does not end up in a
-    // screenshot, a shared link, or the browser's own suggestions.
-    //
-    // After load rather than right here: this module runs while the navigation
-    // is still settling, and a replaceState issued mid-flight gets undone by
-    // the browser writing the fragment it was asked to open — measured, the
-    // hash survived until the call was moved out of the load path.
-    const strip = () => history.replaceState(null, '', location.pathname + location.search);
-    if (document.readyState === 'complete') setTimeout(strip, 0);
-    else addEventListener('load', () => setTimeout(strip, 0), {once: true});
-    return fromUrl;
-  }
-  const saved = (localStorage.getItem(ROOM_KEY) || '').trim();
-  return saved.length >= 20 ? saved : null;
+function resolveClient() {
+  const saved = (localStorage.getItem(CLIENT_KEY) || '').trim();
+  if (saved.length >= 20) return saved;
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const id = [...bytes].map((b) => b.toString(36).padStart(2, '0')).join('').slice(0, 26);
+  localStorage.setItem(CLIENT_KEY, id);
+  return id;
 }
 
-const room = resolveRoom();
-if (!room) {
-  $('#no-room').hidden = false;
-  $('#shell').style.display = 'none';
-  throw new Error('no room');
-}
+const client = resolveClient();
 
 // ------------------------------------------------------------------ state --
 let messages = [];
@@ -89,7 +71,7 @@ const chat = new ChatView($('#messages'));
 const inputField = $('#input-field');
 const sendBtn = $('#send-btn');
 
-const bridge = new MacBridge(room, {onPresence: setPresence});
+const bridge = new MacBridge(client, {onPresence: setPresence});
 
 const picker = new ModelPicker({onChange: (id) => {
   $('#composer-hint').textContent = HINTS[id] || '';
@@ -236,7 +218,6 @@ function startNewConversation() {
   messages = [];
   chat.clear();
   fillSuggestions();
-  applyName(Onboarding.name());
   history.setActive(null);
 }
 
@@ -249,11 +230,6 @@ function fillSuggestions() {
     pick.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
   host.innerHTML = pick.map((s) => `<button class="suggestion" data-text="${s}">${s}</button>`).join('');
-}
-
-function applyName(name) {
-  const h = $('#welcome h1');
-  if (h) h.textContent = name ? `Cześć, ${name}.` : 'Cześć, jestem G-Micro.';
 }
 
 // ------------------------------------------------------------------ input --
@@ -298,24 +274,5 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ------------------------------------------------------------------- boot --
-// Same wizard, honest first screen: here the model is not on this device and
-// what you type does travel — through a database, to a MacBook at home. The
-// desktop copy promises the opposite, and that promise is only true there.
-const WEB_SCREENS = [
-  {
-    title: 'Cześć, jestem G-Micro.',
-    body: 'Mały model językowy, który mówi po polsku. Powstał od zera — nie jest '
-        + 'przerobioną wersją niczego innego. Ta strona sama nic nie liczy: '
-        + 'przekazuje pytania MacBookowi w domu i pokazuje, co odpisze. '
-        + 'Kiedy Mac śpi, nie odpowiem.',
-    tag: 'czym jestem',
-  },
-  SCREENS[1],
-  SCREENS[2],
-];
-
-const onboarding = new Onboarding({onFinish: (name) => applyName(name), screens: WEB_SCREENS});
-if (!Onboarding.seen()) onboarding.open();
-applyName(Onboarding.name());
 fillSuggestions();
 setPresence(false);
