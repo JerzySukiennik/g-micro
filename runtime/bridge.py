@@ -201,8 +201,16 @@ class Bridge:
     # ---------------------------------------------------------------- http --
     def put(self, path, data):
         try:
-            requests.put(f"{self.base}/{path}.json?auth={self.identity.token()}",
-                         json=data, timeout=20)
+            r = requests.put(f"{self.base}/{path}.json?auth={self.identity.token()}",
+                             json=data, timeout=20)
+            # A rules rejection comes back as 401/403 with no exception raised,
+            # so catching RequestException alone made permission failures
+            # invisible: jobs vanished from the queue, nothing was ever written
+            # to out/, and the log stayed clean. Silence looked identical to
+            # success. Report the status instead of assuming it.
+            if r.status_code >= 400:
+                print(f"[bridge] write rejected {r.status_code} ({path}): "
+                      f"{r.text[:200]}", flush=True)
         except requests.RequestException as e:
             # A dropped write is not worth killing a 36-second edit over; the
             # next flush carries the whole accumulated state anyway, because
@@ -256,10 +264,26 @@ class Bridge:
                         if raw.startswith("event: "):
                             event = raw[7:].strip()
                         elif raw.startswith("data: ") and event in ("put", "patch"):
-                            self._on_event(json.loads(raw[6:]))
+                            try:
+                                self._on_event(json.loads(raw[6:]))
+                            except Exception as e:
+                                # One malformed event must not take the listener
+                                # with it. Only RequestException was caught
+                                # below, so anything else — a job node that is
+                                # not a dict, a payload missing a field — killed
+                                # the thread silently: presence kept beating,
+                                # the log stayed clean, and jobs simply piled up
+                                # unanswered with nothing to say why.
+                                print(f"[bridge] zdarzenie odrzucone: "
+                                      f"{type(e).__name__}: {e}", flush=True)
             except requests.RequestException as e:
                 if not self.stopping.is_set():
                     print(f"[bridge] stream lost, retrying: {e}", flush=True)
+                    time.sleep(3)
+            except Exception as e:
+                if not self.stopping.is_set():
+                    print(f"[bridge] stream padl ({type(e).__name__}: {e}) — "
+                          f"wznawiam", flush=True)
                     time.sleep(3)
 
     def _on_event(self, msg):
@@ -272,9 +296,17 @@ class Bridge:
             /<client>/out/<id>                  our own reply echoing back
         """
         path, data = msg.get("path", "/"), msg.get("data")
-        if data is None:
-            return                                   # a deletion, ours usually
         parts = [p for p in path.split("/") if p]
+
+        if data is None:
+            # A deletion. Most are ours - the browser drops its own `out` node
+            # once it has the answer - but a job disappearing means the person
+            # cancelled it or closed the page, and it should stop costing this
+            # machine anything. Ignoring these was why an abandoned tab still
+            # had its pictures rendered minutes later, ahead of somebody who was
+            # actually waiting.
+            self._forget(parts)
+            return
 
         if not parts:
             # The whole tree at once, so anything posted while this Mac was
@@ -297,6 +329,39 @@ class Bridge:
             with self.lock:
                 self.cancelled.add(parts[2])
             self.wake.set()
+
+    def _forget(self, parts):
+        """Drop whatever this deleted path covered.
+
+        The stream reports a removal at whatever depth it happened, so a single
+        job, one client's whole queue, or the entire tree all arrive here. A job
+        already running is flagged cancelled rather than merely unqueued: it is
+        past the point where dropping it from the list would do anything.
+        """
+        if parts and len(parts) > 1 and parts[1] == "out":
+            return                                   # our own reply, cleaned up
+
+        def gone(job):
+            client, job_id, _ = job
+            if not parts:
+                return True                          # whole tree
+            if parts[0] != client:
+                return False
+            if len(parts) == 1:
+                return True                          # this client's subtree
+            if len(parts) == 2 and parts[1] == "jobs":
+                return True                          # this client's queue
+            return len(parts) >= 3 and parts[1] == "jobs" and parts[2] == job_id
+
+        with self.lock:
+            dropped = [j for j in self.jobs if gone(j)]
+            self.jobs = [j for j in self.jobs if not gone(j)]
+            # Anything already in flight cannot be unqueued, only stopped.
+            if len(parts) >= 3 and parts[1] == "jobs":
+                self.cancelled.add(parts[2])
+        if dropped:
+            print(f"[bridge] porzucone: {len(dropped)} zadan(ia)", flush=True)
+        self.wake.set()
 
     def _queue(self, client, job_id, payload):
         if not isinstance(payload, dict) or "text" not in payload:
@@ -450,6 +515,15 @@ class Bridge:
             elif kind == "image_progress":
                 state["progress"] = obj.get("p", 0)
                 flush()
+            elif kind == "doodle":
+                # Whole strokes every flush, not an append: a dropped or
+                # reordered write then costs nothing, since the next one carries
+                # the complete drawing so far. The same reasoning as the text
+                # path, and it matters more here because the point of this model
+                # is watching it arrive.
+                state["strokes"] = obj.get("strokes")
+                state["label"] = obj.get("label")
+                flush(force=bool(obj.get("done")))
             elif kind == "image_result":
                 state["image"] = obj.get("image")
                 state["label"] = obj.get("label")
@@ -462,7 +536,9 @@ class Bridge:
         # model is the only thing that is not one of them. Falling through to
         # chat for an unknown image id used to answer a picture request with a
         # sentence, which reads as the model being broken rather than absent.
-        if model in IMAGE_MODELS:
+        if model == "g-doodle":
+            await self.backend.doodle.run(send, payload.get("text", ""), stop)
+        elif model in IMAGE_MODELS:
             await self.backend.images.run(send, payload.get("text", ""),
                                           payload.get("image") or "", stop,
                                           version=model)
