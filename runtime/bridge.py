@@ -199,6 +199,7 @@ class Bridge:
         self.last_job = time.time()
         self.jobs = []                      # pending (client, id, payload), oldest first
         self.cancelled = set()
+        self.running = set()
         self.lock = threading.Lock()
         self.wake = threading.Event()
         self.stopping = threading.Event()
@@ -301,6 +302,43 @@ class Bridge:
                           f"wznawiam", flush=True)
                     time.sleep(3)
 
+    def reconcile(self, every=60):
+        """Poll for jobs the stream failed to deliver.
+
+        The SSE stream has now gone silently deaf three times in one day: the
+        socket stays open, Firebase's keep-alives keep resetting the read
+        timeout so nothing ever times out, presence keeps beating — and jobs sit
+        in the queue unanswered with a clean log. On 2026-08-21 that was two
+        hours of a working Mac ignoring everything the browser sent.
+
+        A stream is an optimisation for latency, not a source of truth. This
+        thread makes the queue itself the source of truth: one cheap GET a
+        minute, and anything the stream missed gets picked up. _queue dedupes on
+        job id, so overlap with a healthy stream costs nothing.
+        """
+        while not self.stopping.is_set():
+            time.sleep(every)
+            try:
+                r = requests.get(f"{self.base}.json?auth={self.identity.token()}",
+                                 timeout=20)
+                if r.status_code >= 400:
+                    print(f"[bridge] odpytanie odrzucone {r.status_code}", flush=True)
+                    continue
+                found = 0
+                for client, sub in (r.json() or {}).items():
+                    for job_id, payload in sorted((sub.get("jobs") or {}).items(),
+                                                  key=lambda kv: (kv[1] or {}).get("at", 0)
+                                                  if isinstance(kv[1], dict) else 0):
+                        before = len(self.jobs)
+                        self._queue(client, job_id, payload)
+                        found += len(self.jobs) > before
+                if found:
+                    print(f"[bridge] odpytanie podjelo {found} zadan, "
+                          f"ktorych strumien nie dostarczyl", flush=True)
+            except Exception as e:
+                print(f"[bridge] odpytanie nieudane: {type(e).__name__}: {e}",
+                      flush=True)
+
     def _on_event(self, msg):
         """Route one stream event.
 
@@ -382,7 +420,13 @@ class Bridge:
         if not isinstance(payload, dict) or "text" not in payload:
             return
         with self.lock:
-            if any(j[1] == job_id for j in self.jobs):
+            # Pending AND in-flight, because the queue entry is only deleted from
+            # the database once the job finishes. The reconcile poll therefore
+            # sees a running job still sitting there and would queue it a second
+            # time — which is exactly what happened on 2026-08-21: the log shows
+            # the same edit twice, the Mac doing minutes of work for nothing, and
+            # the duplicate then being abandoned when the first run cleaned up.
+            if job_id in self.running or any(j[1] == job_id for j in self.jobs):
                 return
             self.jobs.append((client, job_id, payload))
         self.wake.set()
@@ -452,6 +496,7 @@ class Bridge:
         self.announce(True)
         threading.Thread(target=self.listen, daemon=True).start()
         threading.Thread(target=self.heartbeat, daemon=True).start()
+        threading.Thread(target=self.reconcile, daemon=True).start()
 
         print(f"[bridge] tożsamość Maca: {self.identity.uid}")
         print(f"[bridge] otwórz: {SITE_URL}")
@@ -477,7 +522,12 @@ class Bridge:
                              if j[2].get("model", "g-micro") not in IMAGE_MODELS),
                             0)
                         client, job_id, payload = self.jobs.pop(idx)
-                    self._handle(client, job_id, payload)
+                        self.running.add(job_id)
+                    try:
+                        self._handle(client, job_id, payload)
+                    finally:
+                        with self.lock:
+                            self.running.discard(job_id)
                     self.last_job = time.time()
                 self.maybe_unload()
         except KeyboardInterrupt:
@@ -553,6 +603,8 @@ class Bridge:
         # sentence, which reads as the model being broken rather than absent.
         if model == "g-doodle":
             await self.backend.doodle.run(send, payload.get("text", ""), stop)
+        elif model == "g-weird":
+            await self.backend.weird.run(send, payload.get("text", ""), stop)
         elif model in IMAGE_MODELS:
             await self.backend.images.run(send, payload.get("text", ""),
                                           payload.get("image") or "", stop,

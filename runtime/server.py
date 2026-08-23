@@ -172,6 +172,14 @@ def model_list(images_available: bool = None):
         "available": DoodleModel().available(),
         "needs_text": True,
     })
+    from runtime.weird import WeirdModel
+    models.append({
+        "id": "g-weird",
+        "name": "G-Weird 0.9",
+        "desc": "maluje z tekstu (test)",
+        "available": WeirdModel().available(),
+        "needs_text": True,
+    })
     return models
 
 
@@ -236,6 +244,61 @@ class DoodleBackend:
             await self._say(send, f"Coś poszło nie tak przy rysowaniu: {e}")
             return
 
+        await self._say(send, "")
+
+    async def _say(self, send, text, done=True):
+        if text:
+            await send({"type": "step", "token": text, "done": False,
+                        "neurons": [], "probs": _NO_PROBS})
+        if done:
+            await send({"type": "step", "token": "", "done": True,
+                        "neurons": [], "probs": _NO_PROBS})
+
+
+class WeirdBackend:
+    """G-Weird behind the same socket.
+
+    On a worker thread like the others: one picture is 256 sampled tokens at
+    roughly 25 ms each, so holding the event loop would freeze the stop button
+    and the socket for the whole seven seconds.
+    """
+
+    def __init__(self):
+        self.model = None
+
+    def _get(self):
+        from runtime.weird import WeirdModel
+        if self.model is None:
+            self.model = WeirdModel()
+        return self.model
+
+    @property
+    def available(self):
+        return self._get().available()
+
+    async def run(self, send, text, stop_event):
+        model = self._get()
+        loop = asyncio.get_running_loop()
+        prompt = (text or "").strip()
+        if not prompt:
+            await self._say(send, "Napisz, co namalować.")
+            return
+        try:
+            await loop.run_in_executor(None, model.load)
+        except Exception as e:
+            await self._say(send, f"Nie udało mi się wczytać G-Weird: {e}")
+            return
+
+        if stop_event.is_set():
+            await self._say(send, "Zatrzymane.")
+            return
+        try:
+            url = await loop.run_in_executor(None, lambda: model.paint(prompt))
+        except Exception as e:
+            await self._say(send, f"Coś poszło nie tak przy malowaniu: {e}")
+            return
+
+        await send({"type": "image_result", "image": url, "label": prompt})
         await self._say(send, "")
 
     async def _say(self, send, text, done=True):
@@ -372,6 +435,7 @@ class Backend:
         # network stays on disk until someone picks it.
         self.images = ImageBackend()
         self.doodle = DoodleBackend()
+        self.weird = WeirdBackend()
 
     async def load(self, send):
         """Load weights and drive the Wake sequence.
