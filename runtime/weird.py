@@ -124,7 +124,8 @@ class WeirdModel:
         self.step = ck.get("step", 0)
         return {"step": self.step}
 
-    def paint(self, prompt, scale=4.0, temp=1.0, top_k=100, seed=None):
+    def paint(self, prompt, scale=4.0, temp=1.0, top_k=100, seed=None,
+              should_stop=None):
         """One image, returned as a PNG data URL.
 
         Classifier-free guidance: the prompt runs beside a blank one in the same
@@ -132,6 +133,12 @@ class WeirdModel:
         answer. The vocabulary mask matters as much — text, image and special
         tokens share one 16388-entry vocabulary, so without it the model can
         emit a word in the middle of a picture, which it does happily.
+
+        `should_stop` is polled between tokens and makes paint() return None.
+        Without it a cancel only removed the job from the queue while this loop
+        kept running to the end, so the Mac stayed busy for a picture nobody
+        would ever see — and with a queue in front of it, five cancels meant
+        thirty-five seconds of work owed to nothing.
         """
         import os
         import numpy as np
@@ -157,6 +164,10 @@ class WeirdModel:
             logits = self.model(prefix, kv=kv, pos=0)[:, -1]
             out = []
             for stepno in range(cfg.image_len):
+                # Between tokens, not mid-matmul: one token is ~25 ms, which is
+                # a fine granularity to notice a cancel at.
+                if should_stop is not None and should_stop():
+                    return None
                 cond, uncond = logits[:1], logits[1:]
                 g = uncond + scale * (cond - uncond)
                 g[:, :lo] = -math.inf

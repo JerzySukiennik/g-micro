@@ -293,9 +293,16 @@ class WeirdBackend:
             await self._say(send, "Zatrzymane.")
             return
         try:
-            url = await loop.run_in_executor(None, lambda: model.paint(prompt))
+            url = await loop.run_in_executor(
+                None, lambda: model.paint(prompt, should_stop=stop_event.is_set))
         except Exception as e:
             await self._say(send, f"Coś poszło nie tak przy malowaniu: {e}")
+            return
+
+        # paint() returns None when it noticed the stop between tokens. Saying
+        # so is what tells the queue the slot is free again.
+        if url is None:
+            await self._say(send, "Zatrzymane.")
             return
 
         await send({"type": "image_result", "image": url, "label": prompt})
