@@ -302,7 +302,7 @@ class Bridge:
                           f"wznawiam", flush=True)
                     time.sleep(3)
 
-    def reconcile(self, every=60):
+    def reconcile(self, every=int(__import__('os').environ.get('RECONCILE_EVERY', 5))):
         """Poll for jobs the stream failed to deliver.
 
         The SSE stream has now gone silently deaf three times in one day: the
@@ -312,9 +312,22 @@ class Bridge:
         hours of a working Mac ignoring everything the browser sent.
 
         A stream is an optimisation for latency, not a source of truth. This
-        thread makes the queue itself the source of truth: one cheap GET a
-        minute, and anything the stream missed gets picked up. _queue dedupes on
-        job id, so overlap with a healthy stream costs nothing.
+        thread makes the queue itself the source of truth: one cheap GET, and
+        anything the stream missed gets picked up. _queue dedupes on job id, so
+        overlap with a healthy stream costs nothing.
+
+        Every five seconds rather than every sixty, because on this machine the
+        stream is not an optimisation — it is usually the thing that is broken.
+        The log shows 293 stream deaths in 400 lines, 276 of them DNS failures
+        resolving securetoken.googleapis.com: the Mac runs off an iPhone hotspot
+        (nameserver 172.20.10.1) whose resolver drops out. Every recent job was
+        picked up by this poll rather than the stream, so the poll interval WAS
+        the latency: a 7-second picture took the better part of a minute, and it
+        looked like the model had got slower.
+
+        A GET of the open queue is a few hundred bytes. Paying that every five
+        seconds to turn a minute of waiting into five seconds is not a close
+        call — and when the stream is healthy the dedupe makes it free.
         """
         while not self.stopping.is_set():
             time.sleep(every)
