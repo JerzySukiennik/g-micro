@@ -288,8 +288,13 @@ class WeirdBackend:
             await self._say(send, "Napisz, co namalować.")
             return
         try:
+            t0 = time.time()
             await loop.run_in_executor(None, lambda: model.load(version))
+            print(f"[weird] {version} gotowy w {time.time()-t0:.1f}s", flush=True)
         except Exception as e:
+            # Logged as well as sent: the browser puts this in a tooltip, which
+            # is the last place anyone looks when a picture fails to arrive.
+            import traceback; traceback.print_exc()
             await self._say(send, f"Nie udało mi się wczytać G-Weird: {e}")
             return
 
@@ -297,9 +302,15 @@ class WeirdBackend:
             await self._say(send, "Zatrzymane.")
             return
         try:
+            t0 = time.time()
             url = await loop.run_in_executor(
-                None, lambda: model.paint(prompt, should_stop=stop_event.is_set))
+                None, lambda: model.paint(prompt, should_stop=stop_event.is_set,
+                                          version=version))
+            print(f"[weird] {version} namalowane w {time.time()-t0:.1f}s", flush=True)
         except Exception as e:
+            # Logged as well as sent: the browser puts this in a tooltip, which
+            # is the last place anyone looks when a picture fails to arrive.
+            import traceback; traceback.print_exc()
             await self._say(send, f"Coś poszło nie tak przy malowaniu: {e}")
             return
 

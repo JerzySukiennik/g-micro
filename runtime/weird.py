@@ -212,6 +212,13 @@ class WeirdModel:
                                     pos=cfg.text_len + 1 + stepno)[:, -1]
             codes = torch.cat(out, dim=1) - lo
             grid = int(round(math.sqrt(cfg.image_len)))
+            # Load on demand rather than trusting the caller: a paint() that
+            # asked for a decoder nobody had loaded used to raise KeyError,
+            # which reached the browser as "something went wrong" with no clue
+            # which something. It happened for real — the server passed the
+            # version to load() but not to paint().
+            if version not in self.decoders:
+                self.load(version)
             img = self.decoders[version].decode(codes.view(-1, grid, grid))
 
         arr = ((img.clamp(-1, 1) + 1) * 127.5).byte().permute(0, 2, 3, 1).numpy()[0]
