@@ -172,14 +172,18 @@ def model_list(images_available: bool = None):
         "available": DoodleModel().available(),
         "needs_text": True,
     })
-    from runtime.weird import WeirdModel
-    models.append({
-        "id": "g-weird",
-        "name": "G-Weird 0.9",
-        "desc": "maluje z tekstu (test)",
-        "available": WeirdModel().available(),
-        "needs_text": True,
-    })
+    from runtime.weird import WeirdModel, DECODERS
+    _weird = WeirdModel()
+    for _wire, _name, _desc in [
+            ("g-weird", "G-Weird 0.9", "maluje z tekstu (miekki)"),
+            ("g-weird-1", "G-Weird 1", "maluje z tekstu (ostrzejszy)")]:
+        models.append({
+            "id": _wire,
+            "name": _name,
+            "desc": _desc,
+            "available": _weird.available(_wire),
+            "needs_text": True,
+        })
     return models
 
 
@@ -276,7 +280,7 @@ class WeirdBackend:
     def available(self):
         return self._get().available()
 
-    async def run(self, send, text, stop_event):
+    async def run(self, send, text, stop_event, version="g-weird"):
         model = self._get()
         loop = asyncio.get_running_loop()
         prompt = (text or "").strip()
@@ -284,7 +288,7 @@ class WeirdBackend:
             await self._say(send, "Napisz, co namalować.")
             return
         try:
-            await loop.run_in_executor(None, model.load)
+            await loop.run_in_executor(None, lambda: model.load(version))
         except Exception as e:
             await self._say(send, f"Nie udało mi się wczytać G-Weird: {e}")
             return

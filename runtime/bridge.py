@@ -603,8 +603,11 @@ class Bridge:
         # sentence, which reads as the model being broken rather than absent.
         if model == "g-doodle":
             await self.backend.doodle.run(send, payload.get("text", ""), stop)
-        elif model == "g-weird":
-            await self.backend.weird.run(send, payload.get("text", ""), stop)
+        elif model in ("g-weird", "g-weird-1"):
+            # Same transformer and codebook for both; the id selects only which
+            # decoder renders the codes.
+            await self.backend.weird.run(send, payload.get("text", ""), stop,
+                                         version=model)
         elif model in IMAGE_MODELS:
             await self.backend.images.run(send, payload.get("text", ""),
                                           payload.get("image") or "", stop,

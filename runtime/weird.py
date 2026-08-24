@@ -21,8 +21,24 @@ from pathlib import Path
 G_WEIRD = Path.home() / "Downloads/Claude/Projects/AIe/G-Weird"
 
 CKPT = G_WEIRD / "run/gweird.pt"
-VQVAE = G_WEIRD / "run/vqvae.pt"
 TOKENIZER = G_WEIRD / "run/text.json"
+
+# Both versions share ONE transformer and one codebook — they differ only in the
+# decoder that turns codes into pixels. That is exactly why swapping is safe:
+# the code ids mean the same thing to both, so 0.9 and 1 are the same picture
+# rendered two ways rather than two models.
+#
+#   0.9  the original VQ-VAE decoder: soft, oil-painted, but coherent.
+#   1    8000 steps of adversarial fine-tuning with the encoder and codebook
+#        frozen. Reconstruction error 10.3/255 against 15.7, and detail where
+#        there was smear — at the cost of a fine crackle over everything.
+#
+# Which looks better is a matter of taste, which is why both stay reachable.
+DECODERS = {
+    "g-weird": G_WEIRD / "run/vqvae.pt",
+    "g-weird-1": G_WEIRD / "run/decoder.pt",
+}
+VQVAE = DECODERS["g-weird"]
 
 MIN_CKPT_BYTES = 10_000_000
 
@@ -87,23 +103,37 @@ class WeirdModel:
 
     def __init__(self):
         self.model = None
-        self.vq = None
+        self.decoders = {}
         self.tok = None
         self.cfg = None
         self.step = None
 
-    def available(self) -> bool:
-        return usable(CKPT) and usable(VQVAE) and TOKENIZER.is_file()
+    def available(self, version="g-weird") -> bool:
+        dec = DECODERS.get(version)
+        return bool(dec) and usable(CKPT) and usable(dec) and TOKENIZER.is_file()
 
-    def load(self):
-        if self.model is not None:
+    def load(self, version="g-weird"):
+        """Decoders are cached per version: switching back and forth in the UI
+        should not re-read 200 MB from disk every time."""
+        if self.model is not None and version in self.decoders:
             return {"step": self.step}
-        if not self.available():
-            raise RuntimeError("brak wag G-Weird w run/")
+        if not self.available(version):
+            raise RuntimeError(f"brak wag G-Weird dla wersji {version}")
 
         import torch
         tr = _load_module("model/transformer.py", "_gweird_transformer")
         vq = _load_module("model/vqvae.py", "_gweird_vqvae")
+
+        if version not in self.decoders:
+            vk = torch.load(str(DECODERS[version]), map_location="cpu",
+                            weights_only=False)
+            dec = vq.VQVAE(**vk["arch"])
+            dec.load_state_dict(vk["model"])
+            dec.eval()
+            self.decoders[version] = dec
+
+        if self.model is not None:
+            return {"step": self.step}
 
         ck = torch.load(str(CKPT), map_location="cpu", weights_only=False)
         saved = ck.get("cfg") or ck.get("arch") or {}
@@ -113,19 +143,14 @@ class WeirdModel:
         net.load_state_dict(ck["model"])
         net.eval()
 
-        vk = torch.load(str(VQVAE), map_location="cpu", weights_only=False)
-        dec = vq.VQVAE(**vk["arch"])
-        dec.load_state_dict(vk["model"])
-        dec.eval()
-
-        self.model, self.vq, self.cfg = net, dec, cfg
+        self.model, self.cfg = net, cfg
         self.kv = tr
         self.tok = _load_tokenizer(TOKENIZER)
         self.step = ck.get("step", 0)
         return {"step": self.step}
 
     def paint(self, prompt, scale=4.0, temp=1.0, top_k=100, seed=None,
-              should_stop=None):
+              should_stop=None, version="g-weird"):
         """One image, returned as a PNG data URL.
 
         Classifier-free guidance: the prompt runs beside a blank one in the same
@@ -187,7 +212,7 @@ class WeirdModel:
                                     pos=cfg.text_len + 1 + stepno)[:, -1]
             codes = torch.cat(out, dim=1) - lo
             grid = int(round(math.sqrt(cfg.image_len)))
-            img = self.vq.decode(codes.view(-1, grid, grid))
+            img = self.decoders[version].decode(codes.view(-1, grid, grid))
 
         arr = ((img.clamp(-1, 1) + 1) * 127.5).byte().permute(0, 2, 3, 1).numpy()[0]
         buf = io.BytesIO()
