@@ -20,25 +20,39 @@ from pathlib import Path
 
 G_WEIRD = Path.home() / "Downloads/Claude/Projects/AIe/G-Weird"
 
-CKPT = G_WEIRD / "run/gweird.pt"
-TOKENIZER = G_WEIRD / "run/text.json"
-
-# Both versions share ONE transformer and one codebook — they differ only in the
-# decoder that turns codes into pixels. That is exactly why swapping is safe:
-# the code ids mean the same thing to both, so 0.9 and 1 are the same picture
-# rendered two ways rather than two models.
+# Kazda wersja to teraz KOMPLET: transformer, dekoder i tokenizer tekstu.
 #
-#   0.9  the original VQ-VAE decoder: soft, oil-painted, but coherent.
-#   1    8000 steps of adversarial fine-tuning with the encoder and codebook
-#        frozen. Reconstruction error 10.3/255 against 15.7, and detail where
-#        there was smear — at the cost of a fine crackle over everything.
+# Do 1 wlacznie wystarczal jeden slownik i jeden transformer, bo 0.9 i 1 roznily
+# sie WYLACZNIE dekoderem — te same id kodow, ten sam obraz narysowany dwa razy.
+# 1.1 lamie to zalozenie w kazdym punkcie: ma wlasny tokenizer obrazu (576
+# tokenow zamiast 256, wiec id 4711 znaczy tam co innego), wlasny tokenizer
+# tekstu (ze starego slownika przetrwalo 3193 z 8192 tokenow) i wlasny
+# transformer. Trzymanie tego w jednej wspolnej sciezce dawaloby obrazki
+# zlozone z czesci dwoch roznych modeli — bez bledu, po prostu smieci.
 #
-# Which looks better is a matter of taste, which is why both stay reachable.
-DECODERS = {
-    "g-weird": G_WEIRD / "run/vqvae.pt",
-    "g-weird-1": G_WEIRD / "run/decoder.pt",
+#   0.9  pierwotny dekoder VQ-VAE: miekki, malowany, ale spojny.
+#   1    8000 krokow douczania adwersarialnego przy zamrozonym enkoderze.
+#        Blad rekonstrukcji 10,3/255 wobec 15,7, detal tam gdzie byla maz,
+#        kosztem drobnego trzasku na calosci.
+#   1.1  nowy tokenizer (24x24 zamiast 16x16 — cztery razy gestsza siatka) i
+#        transformer trenowany od zera na 2 357 878 parach zamiast 1 780 125.
+VERSIONS = {
+    "g-weird": {
+        "ckpt": G_WEIRD / "run/gweird.pt",
+        "vqvae": G_WEIRD / "run/vqvae.pt",
+        "text": G_WEIRD / "run/text.json",
+    },
+    "g-weird-1": {
+        "ckpt": G_WEIRD / "run/gweird.pt",
+        "vqvae": G_WEIRD / "run/decoder.pt",
+        "text": G_WEIRD / "run/text.json",
+    },
+    "g-weird-11": {
+        "ckpt": G_WEIRD / "run11/gweird.pt",
+        "vqvae": G_WEIRD / "run11/vqvae.pt",
+        "text": G_WEIRD / "run11/text.json",
+    },
 }
-VQVAE = DECODERS["g-weird"]
 
 MIN_CKPT_BYTES = 10_000_000
 
@@ -102,52 +116,65 @@ class WeirdModel:
     """Lazily loaded: constructing this only stats a path."""
 
     def __init__(self):
-        self.model = None
-        self.decoders = {}
-        self.tok = None
-        self.cfg = None
-        self.step = None
+        # Jeden komplet na wersje. 0.9 i 1 dziela plik transformera, wiec torch
+        # wczyta go dwa razy — 745 MB nadmiaru, gdyby ktos przelaczal miedzy
+        # nimi. Warte tego: alternatywa to wspoldzielony cache po sciezce, ktory
+        # musi wiedziec, ze cfg dwoch wersji jest zgodne, a to zalozenie wlasnie
+        # przestalo byc prawdziwe przy 1.1.
+        self.bundles = {}
 
     def available(self, version="g-weird") -> bool:
-        dec = DECODERS.get(version)
-        return bool(dec) and usable(CKPT) and usable(dec) and TOKENIZER.is_file()
+        v = VERSIONS.get(version)
+        return bool(v) and usable(v["ckpt"]) and usable(v["vqvae"]) \
+            and v["text"].is_file()
 
     def load(self, version="g-weird"):
-        """Decoders are cached per version: switching back and forth in the UI
-        should not re-read 200 MB from disk every time."""
-        if self.model is not None and version in self.decoders:
-            return {"step": self.step}
+        """Komplety sa cache'owane per wersja: przelaczanie w UI nie moze
+        czytac setek megabajtow z dysku za kazdym razem."""
+        if version in self.bundles:
+            return {"step": self.bundles[version]["step"]}
         if not self.available(version):
             raise RuntimeError(f"brak wag G-Weird dla wersji {version}")
 
         import torch
         tr = _load_module("model/transformer.py", "_gweird_transformer")
         vq = _load_module("model/vqvae.py", "_gweird_vqvae")
+        v = VERSIONS[version]
 
-        if version not in self.decoders:
-            vk = torch.load(str(DECODERS[version]), map_location="cpu",
-                            weights_only=False)
-            dec = vq.VQVAE(**vk["arch"])
-            dec.load_state_dict(vk["model"])
-            dec.eval()
-            self.decoders[version] = dec
+        vk = torch.load(str(v["vqvae"]), map_location="cpu", weights_only=False)
+        dec = vq.VQVAE(**vk["arch"])
+        # strict=False: checkpoint tokenizera 1.1 nosi bufory EMA codebooka,
+        # ktorych sam dekoder nie potrzebuje.
+        dec.load_state_dict(vk["model"], strict=False)
+        dec.eval()
 
-        if self.model is not None:
-            return {"step": self.step}
-
-        ck = torch.load(str(CKPT), map_location="cpu", weights_only=False)
+        ck = torch.load(str(v["ckpt"]), map_location="cpu", weights_only=False)
         saved = ck.get("cfg") or ck.get("arch") or {}
-        cfg = tr.WeirdConfig(**{k: v for k, v in saved.items()
+        cfg = tr.WeirdConfig(**{k: val for k, val in saved.items()
                                 if k in tr.WeirdConfig.__dataclass_fields__})
         net = tr.WeirdGPT(cfg)
         net.load_state_dict(ck["model"])
         net.eval()
 
-        self.model, self.cfg = net, cfg
-        self.kv = tr
-        self.tok = _load_tokenizer(TOKENIZER)
-        self.step = ck.get("step", 0)
-        return {"step": self.step}
+        # Siatka dekodera musi zgadzac sie z dlugoscia obrazu transformera.
+        # Gdyby ktos wskazal w VERSIONS dekoder z innego tokenizera, obrazek
+        # wyszedlby bez bledu i bez sensu — wiec sprawdzamy tu, raz, przy
+        # wczytaniu.
+        grid = int(round(math.sqrt(cfg.image_len)))
+        if grid * grid != cfg.image_len:
+            raise RuntimeError(f"{version}: {cfg.image_len} tokenow nie jest "
+                               f"kwadratem")
+        down = 2 ** len(vk["arch"]["mults"])
+        if vk["arch"].get("n_codes", 8192) != cfg.n_image:
+            raise RuntimeError(f"{version}: codebook {vk['arch']['n_codes']} "
+                               f"wobec {cfg.n_image} w transformerze")
+
+        self.bundles[version] = {
+            "model": net, "cfg": cfg, "dec": dec, "grid": grid,
+            "tok": _load_tokenizer(v["text"]), "step": ck.get("step", 0),
+            "res": grid * down,
+        }
+        return {"step": self.bundles[version]["step"]}
 
     def paint(self, prompt, scale=4.0, temp=1.0, top_k=100, seed=None,
               should_stop=None, version="g-weird"):
@@ -172,12 +199,19 @@ class WeirdModel:
         from PIL import Image
 
         gpt_base = _load_module("model/gpt_base.py", "_gweird_gpt_base")
-        cfg = self.cfg
+        # Wczytanie na zadanie, a nie ufanie wolajacemu: paint(), ktory poprosil
+        # o wersje jeszcze nie wczytana, konczyl sie KeyError-em docierajacym do
+        # przegladarki jako "coz sie stalo" bez wskazania czego. Zdarzylo sie na
+        # zywo — serwer podawal wersje do load(), ale nie do paint().
+        if version not in self.bundles:
+            self.load(version)
+        b = self.bundles[version]
+        cfg = b["cfg"]
         if seed is None:
             seed = int.from_bytes(os.urandom(4), "big")
         torch.manual_seed(seed)
 
-        ids = self.tok.encode(prompt).ids[:cfg.text_len]
+        ids = b["tok"].encode(prompt).ids[:cfg.text_len]
         row = ([cfg.text_token(i) for i in ids]
                + [cfg.PAD] * (cfg.text_len - len(ids)) + [cfg.BOS_IMG])
         blank = [cfg.PAD] * cfg.text_len + [cfg.BOS_IMG]
@@ -186,7 +220,7 @@ class WeirdModel:
         lo, hi = cfg.image_token(0), cfg.image_token(cfg.n_image - 1)
         kv = gpt_base.KVCache(cfg.n_layer)
         with torch.no_grad():
-            logits = self.model(prefix, kv=kv, pos=0)[:, -1]
+            logits = b["model"](prefix, kv=kv, pos=0)[:, -1]
             out = []
             for stepno in range(cfg.image_len):
                 # Between tokens, not mid-matmul: one token is ~25 ms, which is
@@ -208,18 +242,10 @@ class WeirdModel:
                 # Both branches continue with the SAME token: letting them
                 # diverge would make the unconditional branch describe a
                 # different picture and the guidance term meaningless.
-                logits = self.model(torch.cat([nxt, nxt], dim=0), kv=kv,
+                logits = b["model"](torch.cat([nxt, nxt], dim=0), kv=kv,
                                     pos=cfg.text_len + 1 + stepno)[:, -1]
             codes = torch.cat(out, dim=1) - lo
-            grid = int(round(math.sqrt(cfg.image_len)))
-            # Load on demand rather than trusting the caller: a paint() that
-            # asked for a decoder nobody had loaded used to raise KeyError,
-            # which reached the browser as "something went wrong" with no clue
-            # which something. It happened for real — the server passed the
-            # version to load() but not to paint().
-            if version not in self.decoders:
-                self.load(version)
-            img = self.decoders[version].decode(codes.view(-1, grid, grid))
+            img = b["dec"].decode(codes.view(-1, b["grid"], b["grid"]))
 
         arr = ((img.clamp(-1, 1) + 1) * 127.5).byte().permute(0, 2, 3, 1).numpy()[0]
         buf = io.BytesIO()

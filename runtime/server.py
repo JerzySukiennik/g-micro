@@ -172,11 +172,12 @@ def model_list(images_available: bool = None):
         "available": DoodleModel().available(),
         "needs_text": True,
     })
-    from runtime.weird import WeirdModel, DECODERS
+    from runtime.weird import WeirdModel
     _weird = WeirdModel()
     for _wire, _name, _desc in [
             ("g-weird", "G-Weird 0.9", "maluje z tekstu (miekki)"),
-            ("g-weird-1", "G-Weird 1", "maluje z tekstu (ostrzejszy)")]:
+            ("g-weird-1", "G-Weird 1", "maluje z tekstu (ostrzejszy)"),
+            ("g-weird-11", "G-Weird 1.1", "maluje z tekstu (nowy tokenizer)")]:
         models.append({
             "id": _wire,
             "name": _name,
