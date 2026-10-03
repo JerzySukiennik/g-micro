@@ -622,6 +622,11 @@ class Bridge:
             # obrazu, wlasny slownik tekstu, wlasne wagi.
             await self.backend.weird.run(send, payload.get("text", ""), stop,
                                          version=model)
+        elif model == "g-weird-live":
+            # Rysuje z tekstu albo przemalowuje zaznaczone komorki obrazu; obraz
+            # i maska przychodza w tym samym zadaniu (maska w polu `text`).
+            await self.backend.live.run(send, payload.get("text", ""),
+                                        payload.get("image") or "", stop)
         elif model in IMAGE_MODELS:
             await self.backend.images.run(send, payload.get("text", ""),
                                           payload.get("image") or "", stop,

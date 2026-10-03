@@ -185,6 +185,14 @@ def model_list(images_available: bool = None):
             "available": _weird.available(_wire),
             "needs_text": True,
         })
+    from runtime.live import LiveModel
+    models.append({
+        "id": "g-weird-live",
+        "name": "G-Weird Live",
+        "desc": "beta - maluje i poprawia zamalowany fragment",
+        "available": LiveModel().available(),
+        "needs_text": True,
+    })
     return models
 
 
@@ -333,6 +341,101 @@ class WeirdBackend:
                         "neurons": [], "probs": _NO_PROBS})
 
 
+class LiveBackend:
+    """G-Weird Live: draws from words, or redraws the cells painted over.
+
+    One job, two shapes. Plain text is a request to draw. A JSON object
+    {"p": caption, "m": 144-hex mask, "s": seed} plus the current picture in
+    `image` is a request to redraw those cells and keep every other pixel.
+
+    On a worker thread, with a per-round callback: a picture is twelve rounds of
+    about 0.6 s, and the stop button must land between rounds instead of after
+    the whole thing. The callback is also what feeds the progress bar.
+    """
+
+    def __init__(self):
+        self.model = None
+
+    def _get(self):
+        from runtime.live import LiveModel
+        if self.model is None:
+            self.model = LiveModel()
+        return self.model
+
+    async def run(self, send, text, image_url, stop_event, version=None):
+        from runtime.live import Stopped, parse_job_text
+        model = self._get()
+        loop = asyncio.get_running_loop()
+        job = parse_job_text(text)
+        prompt = job["prompt"]
+        if not prompt:
+            await self._say(send, "Napisz, co namalować.")
+            return
+        editing = job["mask"] is not None
+        if editing and not image_url:
+            await self._say(send, "Brakuje obrazu do poprawienia.")
+            return
+
+        try:
+            t0 = time.time()
+            info = await loop.run_in_executor(None, model.load)
+            print(f"[live] gotowy w {time.time()-t0:.1f}s (krok {info.get('step')})",
+                  flush=True)
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            await self._say(send, f"Nie udało mi się wczytać G-Weird Live: {e}")
+            return
+
+        if stop_event.is_set():
+            await self._say(send, "Zatrzymane.")
+            return
+
+        await send({"type": "image_progress", "p": 0.0})
+
+        def progress(p):
+            # Called from the worker thread, once per round.
+            asyncio.run_coroutine_threadsafe(
+                send({"type": "image_progress", "p": p}), loop)
+
+        try:
+            t0 = time.time()
+            if editing:
+                url = await loop.run_in_executor(
+                    None, lambda: model.edit(
+                        image_url, job["mask"], prompt, seed=job["seed"],
+                        on_progress=progress, should_stop=stop_event.is_set))
+            else:
+                url = await loop.run_in_executor(
+                    None, lambda: model.draw(
+                        prompt, seed=job["seed"], on_progress=progress,
+                        should_stop=stop_event.is_set))
+            print(f"[live] {'poprawione' if editing else 'namalowane'} "
+                  f"w {time.time()-t0:.1f}s", flush=True)
+        except Stopped:
+            await self._say(send, "Zatrzymane.")
+            return
+        except ValueError as e:
+            # A bad mask or an empty selection: the person can fix it, so say so.
+            await self._say(send, str(e))
+            return
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            await self._say(send, f"Coś poszło nie tak przy malowaniu: {e}")
+            return
+
+        await send({"type": "image_result", "image": url, "label": prompt,
+                    "step": info.get("step")})
+        await self._say(send, "")
+
+    async def _say(self, send, text, done=True):
+        if text:
+            await send({"type": "step", "token": text, "done": False,
+                        "neurons": [], "probs": _NO_PROBS})
+        if done:
+            await send({"type": "step", "token": "", "done": True,
+                        "neurons": [], "probs": _NO_PROBS})
+
+
 class ImageBackend:
     """G-Images as a second model behind the same socket.
 
@@ -459,6 +562,7 @@ class Backend:
         self.images = ImageBackend()
         self.doodle = DoodleBackend()
         self.weird = WeirdBackend()
+        self.live = LiveBackend()
 
     async def load(self, send):
         """Load weights and drive the Wake sequence.
